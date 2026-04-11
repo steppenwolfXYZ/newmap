@@ -560,23 +560,34 @@
       }
     },
     {
-      "id": "rail",
+      "id": "rail-tunnel",
       "type": "line",
       "source": "openmaptiles",
       "source-layer": "transportation",
       "minzoom": 8,
       "filter": [
-        "match",
+        "all",
         [
-          "get",
-          "class"
+          "match",
+          [
+            "get",
+            "class"
+          ],
+          [
+            "rail",
+            "transit"
+          ],
+          true,
+          false
         ],
         [
-          "rail",
-          "transit"
-        ],
-        true,
-        false
+          "==",
+          [
+            "get",
+            "brunnel"
+          ],
+          "tunnel"
+        ]
       ],
       "layout": {
         "line-cap": "butt",
@@ -597,7 +608,64 @@
           14,
           2.0
         ],
-        "line-opacity": 0.5
+        "line-opacity": 0.4
+      }
+    },
+    {
+      "id": "rail",
+      "type": "line",
+      "source": "openmaptiles",
+      "source-layer": "transportation",
+      "minzoom": 8,
+      "filter": [
+        "all",
+        [
+          "match",
+          [
+            "get",
+            "class"
+          ],
+          [
+            "rail",
+            "transit"
+          ],
+          true,
+          false
+        ],
+        [
+          "match",
+          [
+            "get",
+            "brunnel"
+          ],
+          [
+            "bridge",
+            "tunnel"
+          ],
+          false,
+          true
+        ]
+      ],
+      "layout": {
+        "line-cap": "butt",
+        "line-join": "round"
+      },
+      "paint": {
+        "line-color": "#ffffff",
+        "line-width": [
+          "interpolate",
+          [
+            "linear"
+          ],
+          [
+            "zoom"
+          ],
+          8,
+          0.75,
+          14,
+          2.0
+        ],
+        "line-opacity": 0.2
       }
     },
     {
@@ -818,6 +886,7 @@
             "secondary",
             "rail",
             "transit",
+            "ferry",
             "path"
           ],
           false,
@@ -1677,6 +1746,7 @@
             "secondary",
             "rail",
             "transit",
+            "ferry",
             "path"
           ],
           false,
@@ -2324,1163 +2394,6 @@
       }
     },
     {
-      "id": "road-motorway-line-bridge",
-      "type": "line",
-      "source": "openmaptiles",
-      "source-layer": "transportation",
-      "minzoom": 5,
-      "maxzoom": 13,
-      "filter": [
-        "all",
-        [
-          "match",
-          [
-            "get",
-            "class"
-          ],
-          [
-            "motorway",
-            "trunk"
-          ],
-          true,
-          false
-        ],
-        [
-          "==",
-          [
-            "get",
-            "brunnel"
-          ],
-          "bridge"
-        ]
-      ],
-      "paint": {
-        "line-color": "#a0a0a0",
-        "line-width": 1,
-        "line-dasharray": [
-          4,
-          3
-        ],
-        "line-opacity": 1.0
-      }
-    },
-    {
-      "id": "road-motorway-fill-bridge",
-      "type": "line",
-      "source": "openmaptiles",
-      "source-layer": "transportation",
-      "minzoom": 13,
-      "filter": [
-        "all",
-        [
-          "match",
-          [
-            "get",
-            "class"
-          ],
-          [
-            "motorway",
-            "trunk"
-          ],
-          true,
-          false
-        ],
-        [
-          "==",
-          [
-            "get",
-            "brunnel"
-          ],
-          "bridge"
-        ]
-      ],
-      "layout": {
-        "line-cap": "butt",
-        "line-join": "round"
-      },
-      "paint": {
-        "line-color": "#c4c0b8",
-        "line-width": [
-          "interpolate",
-          [
-            "exponential",
-            2
-          ],
-          [
-            "zoom"
-          ],
-          13,
-          1.84,
-          22,
-          941.99
-        ],
-        "line-opacity": 1.0
-      }
-    },
-    {
-      "id": "road-motorway-casing-bridge",
-      "type": "line",
-      "source": "openmaptiles",
-      "source-layer": "transportation",
-      "minzoom": 13,
-      "filter": [
-        "all",
-        [
-          "match",
-          [
-            "get",
-            "class"
-          ],
-          [
-            "motorway",
-            "trunk"
-          ],
-          true,
-          false
-        ],
-        [
-          "==",
-          [
-            "get",
-            "brunnel"
-          ],
-          "bridge"
-        ]
-      ],
-      "layout": {
-        "line-cap": "butt",
-        "line-join": "round"
-      },
-      "paint": {
-        "line-color": "#a8a090",
-        "line-width": [
-          "interpolate",
-          [
-            "exponential",
-            2
-          ],
-          [
-            "zoom"
-          ],
-          13,
-          2.07,
-          22,
-          1059.74
-        ],
-        "line-opacity": 0.4
-      }
-    },
-    {
-      "id": "road-main-line-bridge",
-      "type": "line",
-      "source": "openmaptiles",
-      "source-layer": "transportation",
-      "minzoom": 8,
-      "maxzoom": 14,
-      "filter": [
-        "all",
-        [
-          "match",
-          [
-            "get",
-            "class"
-          ],
-          [
-            "primary",
-            "secondary"
-          ],
-          true,
-          false
-        ],
-        [
-          "==",
-          [
-            "get",
-            "brunnel"
-          ],
-          "bridge"
-        ]
-      ],
-      "layout": {
-        "line-cap": "round",
-        "line-join": "round"
-      },
-      "paint": {
-        "line-color": "#b0aca4",
-        "line-width": [
-          "step",
-          [
-            "zoom"
-          ],
-          1,
-          13,
-          2
-        ],
-        "line-opacity": 1.0
-      }
-    },
-    {
-      "id": "road-main-fill-bridge",
-      "type": "line",
-      "source": "openmaptiles",
-      "source-layer": "transportation",
-      "minzoom": 14,
-      "filter": [
-        "all",
-        [
-          "match",
-          [
-            "get",
-            "class"
-          ],
-          [
-            "primary",
-            "secondary"
-          ],
-          true,
-          false
-        ],
-        [
-          "==",
-          [
-            "get",
-            "brunnel"
-          ],
-          "bridge"
-        ]
-      ],
-      "layout": {
-        "line-cap": "butt",
-        "line-join": "round"
-      },
-      "paint": {
-        "line-color": "#ccc8c0",
-        "line-width": [
-          "interpolate",
-          [
-            "exponential",
-            2
-          ],
-          [
-            "zoom"
-          ],
-          14,
-          3.07,
-          22,
-          784.99
-        ],
-        "line-opacity": 1.0
-      }
-    },
-    {
-      "id": "road-main-casing-bridge",
-      "type": "line",
-      "source": "openmaptiles",
-      "source-layer": "transportation",
-      "minzoom": 14,
-      "filter": [
-        "all",
-        [
-          "match",
-          [
-            "get",
-            "class"
-          ],
-          [
-            "primary",
-            "secondary"
-          ],
-          true,
-          false
-        ],
-        [
-          "==",
-          [
-            "get",
-            "brunnel"
-          ],
-          "bridge"
-        ]
-      ],
-      "layout": {
-        "line-cap": "butt",
-        "line-join": "round"
-      },
-      "paint": {
-        "line-color": "#a8a090",
-        "line-width": [
-          "interpolate",
-          [
-            "exponential",
-            2
-          ],
-          [
-            "zoom"
-          ],
-          14,
-          3.37,
-          22,
-          863.49
-        ],
-        "line-opacity": 0.3
-      }
-    },
-    {
-      "id": "road-walkable-midline-bridge",
-      "type": "line",
-      "source": "openmaptiles",
-      "source-layer": "transportation",
-      "minzoom": 12,
-      "maxzoom": 15,
-      "filter": [
-        "all",
-        [
-          "match",
-          [
-            "get",
-            "class"
-          ],
-          [
-            "motorway",
-            "trunk",
-            "primary",
-            "secondary",
-            "rail",
-            "transit",
-            "path"
-          ],
-          false,
-          true
-        ],
-        [
-          "==",
-          [
-            "get",
-            "brunnel"
-          ],
-          "bridge"
-        ]
-      ],
-      "layout": {
-        "line-cap": "round",
-        "line-join": "round"
-      },
-      "paint": {
-        "line-color": [
-          "case",
-          [
-            "==",
-            [
-              "get",
-              "subclass"
-            ],
-            "pedestrian"
-          ],
-          "#c08040",
-          [
-            "==",
-            [
-              "get",
-              "subclass"
-            ],
-            "living_street"
-          ],
-          "#c08040",
-          [
-            "==",
-            [
-              "get",
-              "class"
-            ],
-            "minor"
-          ],
-          "#c08040",
-          [
-            "==",
-            [
-              "get",
-              "class"
-            ],
-            "residential"
-          ],
-          "#c08040",
-          [
-            "==",
-            [
-              "get",
-              "class"
-            ],
-            "service"
-          ],
-          "#c08040",
-          [
-            "==",
-            [
-              "get",
-              "class"
-            ],
-            "tertiary"
-          ],
-          "#c08040",
-          [
-            "==",
-            [
-              "get",
-              "class"
-            ],
-            "track"
-          ],
-          "#c08040",
-          "#c08040"
-        ],
-        "line-width": [
-          "case",
-          [
-            "any",
-            [
-              "==",
-              [
-                "get",
-                "subclass"
-              ],
-              "pedestrian"
-            ],
-            [
-              "==",
-              [
-                "get",
-                "subclass"
-              ],
-              "living_street"
-            ]
-          ],
-          2.0,
-          [
-            "any",
-            [
-              "==",
-              [
-                "get",
-                "class"
-              ],
-              "minor"
-            ],
-            [
-              "==",
-              [
-                "get",
-                "class"
-              ],
-              "residential"
-            ]
-          ],
-          1.5,
-          1.0
-        ],
-        "line-opacity": [
-          "interpolate",
-          [
-            "linear"
-          ],
-          [
-            "zoom"
-          ],
-          12,
-          0.3,
-          14,
-          0.8
-        ]
-      }
-    },
-    {
-      "id": "road-walkable-fill-wide-bridge",
-      "type": "line",
-      "source": "openmaptiles",
-      "source-layer": "transportation",
-      "minzoom": 15,
-      "filter": [
-        "all",
-        [
-          "match",
-          [
-            "get",
-            "class"
-          ],
-          [
-            "tertiary"
-          ],
-          true,
-          false
-        ],
-        [
-          "==",
-          [
-            "get",
-            "brunnel"
-          ],
-          "bridge"
-        ]
-      ],
-      "layout": {
-        "line-cap": "butt",
-        "line-join": "round"
-      },
-      "paint": {
-        "line-color": [
-          "case",
-          [
-            "==",
-            [
-              "get",
-              "subclass"
-            ],
-            "pedestrian"
-          ],
-          "#c08040",
-          [
-            "==",
-            [
-              "get",
-              "subclass"
-            ],
-            "living_street"
-          ],
-          "#c08040",
-          [
-            "==",
-            [
-              "get",
-              "class"
-            ],
-            "minor"
-          ],
-          "#c08040",
-          [
-            "==",
-            [
-              "get",
-              "class"
-            ],
-            "residential"
-          ],
-          "#c08040",
-          [
-            "==",
-            [
-              "get",
-              "class"
-            ],
-            "service"
-          ],
-          "#c08040",
-          [
-            "==",
-            [
-              "get",
-              "class"
-            ],
-            "tertiary"
-          ],
-          "#c08040",
-          [
-            "==",
-            [
-              "get",
-              "class"
-            ],
-            "track"
-          ],
-          "#c08040",
-          "#c08040"
-        ],
-        "line-width": [
-          "interpolate",
-          [
-            "exponential",
-            2
-          ],
-          [
-            "zoom"
-          ],
-          15,
-          3.68,
-          22,
-          471.0
-        ],
-        "line-opacity": 1.0
-      }
-    },
-    {
-      "id": "road-walkable-casing-wide-bridge",
-      "type": "line",
-      "source": "openmaptiles",
-      "source-layer": "transportation",
-      "minzoom": 15,
-      "filter": [
-        "all",
-        [
-          "match",
-          [
-            "get",
-            "class"
-          ],
-          [
-            "tertiary"
-          ],
-          true,
-          false
-        ],
-        [
-          "==",
-          [
-            "get",
-            "brunnel"
-          ],
-          "bridge"
-        ]
-      ],
-      "layout": {
-        "line-cap": "butt",
-        "line-join": "round"
-      },
-      "paint": {
-        "line-color": "#a8a090",
-        "line-width": [
-          "interpolate",
-          [
-            "exponential",
-            2
-          ],
-          [
-            "zoom"
-          ],
-          15,
-          4.14,
-          22,
-          529.87
-        ],
-        "line-opacity": 0.25
-      }
-    },
-    {
-      "id": "road-walkable-fill-mid-bridge",
-      "type": "line",
-      "source": "openmaptiles",
-      "source-layer": "transportation",
-      "minzoom": 15,
-      "filter": [
-        "all",
-        [
-          "match",
-          [
-            "get",
-            "class"
-          ],
-          [
-            "minor",
-            "residential",
-            "unclassified",
-            "living_street"
-          ],
-          true,
-          false
-        ],
-        [
-          "==",
-          [
-            "get",
-            "brunnel"
-          ],
-          "bridge"
-        ]
-      ],
-      "layout": {
-        "line-cap": "butt",
-        "line-join": "round"
-      },
-      "paint": {
-        "line-color": [
-          "case",
-          [
-            "==",
-            [
-              "get",
-              "subclass"
-            ],
-            "pedestrian"
-          ],
-          "#c08040",
-          [
-            "==",
-            [
-              "get",
-              "subclass"
-            ],
-            "living_street"
-          ],
-          "#c08040",
-          [
-            "==",
-            [
-              "get",
-              "class"
-            ],
-            "minor"
-          ],
-          "#c08040",
-          [
-            "==",
-            [
-              "get",
-              "class"
-            ],
-            "residential"
-          ],
-          "#c08040",
-          [
-            "==",
-            [
-              "get",
-              "class"
-            ],
-            "service"
-          ],
-          "#c08040",
-          [
-            "==",
-            [
-              "get",
-              "class"
-            ],
-            "tertiary"
-          ],
-          "#c08040",
-          [
-            "==",
-            [
-              "get",
-              "class"
-            ],
-            "track"
-          ],
-          "#c08040",
-          "#c08040"
-        ],
-        "line-width": [
-          "interpolate",
-          [
-            "exponential",
-            2
-          ],
-          [
-            "zoom"
-          ],
-          15,
-          2.76,
-          22,
-          353.25
-        ],
-        "line-opacity": 1.0
-      }
-    },
-    {
-      "id": "road-walkable-casing-mid-bridge",
-      "type": "line",
-      "source": "openmaptiles",
-      "source-layer": "transportation",
-      "minzoom": 15,
-      "filter": [
-        "all",
-        [
-          "match",
-          [
-            "get",
-            "class"
-          ],
-          [
-            "minor",
-            "residential",
-            "unclassified",
-            "living_street"
-          ],
-          true,
-          false
-        ],
-        [
-          "==",
-          [
-            "get",
-            "brunnel"
-          ],
-          "bridge"
-        ]
-      ],
-      "layout": {
-        "line-cap": "butt",
-        "line-join": "round"
-      },
-      "paint": {
-        "line-color": "#a8a090",
-        "line-width": [
-          "interpolate",
-          [
-            "exponential",
-            2
-          ],
-          [
-            "zoom"
-          ],
-          15,
-          3.22,
-          22,
-          412.12
-        ],
-        "line-opacity": 0.25
-      }
-    },
-    {
-      "id": "road-walkable-fill-pedestrian-bridge",
-      "type": "line",
-      "source": "openmaptiles",
-      "source-layer": "transportation",
-      "minzoom": 15,
-      "filter": [
-        "all",
-        [
-          "match",
-          [
-            "get",
-            "class"
-          ],
-          [
-            "pedestrian"
-          ],
-          true,
-          false
-        ],
-        [
-          "==",
-          [
-            "get",
-            "brunnel"
-          ],
-          "bridge"
-        ]
-      ],
-      "layout": {
-        "line-cap": "butt",
-        "line-join": "round"
-      },
-      "paint": {
-        "line-color": [
-          "case",
-          [
-            "==",
-            [
-              "get",
-              "subclass"
-            ],
-            "pedestrian"
-          ],
-          "#c08040",
-          [
-            "==",
-            [
-              "get",
-              "subclass"
-            ],
-            "living_street"
-          ],
-          "#c08040",
-          [
-            "==",
-            [
-              "get",
-              "class"
-            ],
-            "minor"
-          ],
-          "#c08040",
-          [
-            "==",
-            [
-              "get",
-              "class"
-            ],
-            "residential"
-          ],
-          "#c08040",
-          [
-            "==",
-            [
-              "get",
-              "class"
-            ],
-            "service"
-          ],
-          "#c08040",
-          [
-            "==",
-            [
-              "get",
-              "class"
-            ],
-            "tertiary"
-          ],
-          "#c08040",
-          [
-            "==",
-            [
-              "get",
-              "class"
-            ],
-            "track"
-          ],
-          "#c08040",
-          "#c08040"
-        ],
-        "line-width": [
-          "interpolate",
-          [
-            "exponential",
-            2
-          ],
-          [
-            "zoom"
-          ],
-          15,
-          2.45,
-          22,
-          314.0
-        ],
-        "line-opacity": 1.0
-      }
-    },
-    {
-      "id": "road-walkable-casing-pedestrian-bridge",
-      "type": "line",
-      "source": "openmaptiles",
-      "source-layer": "transportation",
-      "minzoom": 15,
-      "filter": [
-        "all",
-        [
-          "match",
-          [
-            "get",
-            "class"
-          ],
-          [
-            "pedestrian"
-          ],
-          true,
-          false
-        ],
-        [
-          "==",
-          [
-            "get",
-            "brunnel"
-          ],
-          "bridge"
-        ]
-      ],
-      "layout": {
-        "line-cap": "butt",
-        "line-join": "round"
-      },
-      "paint": {
-        "line-color": "#a8a090",
-        "line-width": [
-          "interpolate",
-          [
-            "exponential",
-            2
-          ],
-          [
-            "zoom"
-          ],
-          15,
-          2.91,
-          22,
-          372.87
-        ],
-        "line-opacity": 0.25
-      }
-    },
-    {
-      "id": "road-walkable-fill-narrow-bridge",
-      "type": "line",
-      "source": "openmaptiles",
-      "source-layer": "transportation",
-      "minzoom": 15,
-      "filter": [
-        "all",
-        [
-          "match",
-          [
-            "get",
-            "class"
-          ],
-          [
-            "service",
-            "track"
-          ],
-          true,
-          false
-        ],
-        [
-          "==",
-          [
-            "get",
-            "brunnel"
-          ],
-          "bridge"
-        ]
-      ],
-      "layout": {
-        "line-cap": "butt",
-        "line-join": "round"
-      },
-      "paint": {
-        "line-color": [
-          "case",
-          [
-            "==",
-            [
-              "get",
-              "subclass"
-            ],
-            "pedestrian"
-          ],
-          "#c08040",
-          [
-            "==",
-            [
-              "get",
-              "subclass"
-            ],
-            "living_street"
-          ],
-          "#c08040",
-          [
-            "==",
-            [
-              "get",
-              "class"
-            ],
-            "minor"
-          ],
-          "#c08040",
-          [
-            "==",
-            [
-              "get",
-              "class"
-            ],
-            "residential"
-          ],
-          "#c08040",
-          [
-            "==",
-            [
-              "get",
-              "class"
-            ],
-            "service"
-          ],
-          "#c08040",
-          [
-            "==",
-            [
-              "get",
-              "class"
-            ],
-            "tertiary"
-          ],
-          "#c08040",
-          [
-            "==",
-            [
-              "get",
-              "class"
-            ],
-            "track"
-          ],
-          "#c08040",
-          "#c08040"
-        ],
-        "line-width": [
-          "interpolate",
-          [
-            "exponential",
-            2
-          ],
-          [
-            "zoom"
-          ],
-          15,
-          1.23,
-          22,
-          157.0
-        ],
-        "line-opacity": 1.0
-      }
-    },
-    {
-      "id": "road-walkable-casing-narrow-bridge",
-      "type": "line",
-      "source": "openmaptiles",
-      "source-layer": "transportation",
-      "minzoom": 15,
-      "filter": [
-        "all",
-        [
-          "match",
-          [
-            "get",
-            "class"
-          ],
-          [
-            "service",
-            "track"
-          ],
-          true,
-          false
-        ],
-        [
-          "==",
-          [
-            "get",
-            "brunnel"
-          ],
-          "bridge"
-        ]
-      ],
-      "layout": {
-        "line-cap": "butt",
-        "line-join": "round"
-      },
-      "paint": {
-        "line-color": "#a8a090",
-        "line-width": [
-          "interpolate",
-          [
-            "exponential",
-            2
-          ],
-          [
-            "zoom"
-          ],
-          15,
-          1.69,
-          22,
-          215.87
-        ],
-        "line-opacity": 0.25
-      }
-    },
-    {
       "id": "path-paved-tunnel",
       "type": "line",
       "source": "openmaptiles",
@@ -3752,6 +2665,771 @@
           16,
           0.8
         ]
+      }
+    },
+    {
+      "id": "bridge-deck",
+      "type": "line",
+      "source": "openmaptiles",
+      "source-layer": "transportation",
+      "minzoom": 8,
+      "filter": [
+        "==",
+        [
+          "get",
+          "brunnel"
+        ],
+        "bridge"
+      ],
+      "layout": {
+        "line-cap": "butt",
+        "line-join": "round"
+      },
+      "paint": {
+        "line-color": "#c4c0b8",
+        "line-width": [
+          "interpolate",
+          [
+            "exponential",
+            2
+          ],
+          [
+            "zoom"
+          ],
+          8,
+          1.5,
+          13,
+          1.5,
+          14,
+          2.3,
+          22,
+          588.7
+        ],
+        "line-opacity": 0.6
+      }
+    },
+    {
+      "id": "rail-bridge",
+      "type": "line",
+      "source": "openmaptiles",
+      "source-layer": "transportation",
+      "minzoom": 8,
+      "filter": [
+        "all",
+        [
+          "match",
+          [
+            "get",
+            "class"
+          ],
+          [
+            "rail",
+            "transit"
+          ],
+          true,
+          false
+        ],
+        [
+          "==",
+          [
+            "get",
+            "brunnel"
+          ],
+          "bridge"
+        ]
+      ],
+      "layout": {
+        "line-cap": "butt",
+        "line-join": "round"
+      },
+      "paint": {
+        "line-color": "#ffffff",
+        "line-width": [
+          "interpolate",
+          [
+            "linear"
+          ],
+          [
+            "zoom"
+          ],
+          8,
+          0.75,
+          14,
+          2.0
+        ],
+        "line-opacity": 0.2
+      }
+    },
+    {
+      "id": "road-motorway-line-bridge",
+      "type": "line",
+      "source": "openmaptiles",
+      "source-layer": "transportation",
+      "minzoom": 5,
+      "maxzoom": 13,
+      "filter": [
+        "all",
+        [
+          "match",
+          [
+            "get",
+            "class"
+          ],
+          [
+            "motorway",
+            "trunk"
+          ],
+          true,
+          false
+        ],
+        [
+          "==",
+          [
+            "get",
+            "brunnel"
+          ],
+          "bridge"
+        ]
+      ],
+      "paint": {
+        "line-color": "#a0a0a0",
+        "line-width": 1,
+        "line-dasharray": [
+          4,
+          3
+        ],
+        "line-opacity": 1.0
+      }
+    },
+    {
+      "id": "road-motorway-fill-bridge",
+      "type": "line",
+      "source": "openmaptiles",
+      "source-layer": "transportation",
+      "minzoom": 13,
+      "filter": [
+        "all",
+        [
+          "match",
+          [
+            "get",
+            "class"
+          ],
+          [
+            "motorway",
+            "trunk"
+          ],
+          true,
+          false
+        ],
+        [
+          "==",
+          [
+            "get",
+            "brunnel"
+          ],
+          "bridge"
+        ]
+      ],
+      "layout": {
+        "line-cap": "butt",
+        "line-join": "round"
+      },
+      "paint": {
+        "line-color": "#c4c0b8",
+        "line-width": [
+          "interpolate",
+          [
+            "exponential",
+            2
+          ],
+          [
+            "zoom"
+          ],
+          13,
+          1.84,
+          22,
+          941.99
+        ],
+        "line-opacity": 1.0
+      }
+    },
+    {
+      "id": "road-main-line-bridge",
+      "type": "line",
+      "source": "openmaptiles",
+      "source-layer": "transportation",
+      "minzoom": 8,
+      "maxzoom": 14,
+      "filter": [
+        "all",
+        [
+          "match",
+          [
+            "get",
+            "class"
+          ],
+          [
+            "primary",
+            "secondary"
+          ],
+          true,
+          false
+        ],
+        [
+          "==",
+          [
+            "get",
+            "brunnel"
+          ],
+          "bridge"
+        ]
+      ],
+      "layout": {
+        "line-cap": "round",
+        "line-join": "round"
+      },
+      "paint": {
+        "line-color": "#b0aca4",
+        "line-width": [
+          "step",
+          [
+            "zoom"
+          ],
+          1,
+          13,
+          2
+        ],
+        "line-opacity": 1.0
+      }
+    },
+    {
+      "id": "road-main-fill-bridge",
+      "type": "line",
+      "source": "openmaptiles",
+      "source-layer": "transportation",
+      "minzoom": 14,
+      "filter": [
+        "all",
+        [
+          "match",
+          [
+            "get",
+            "class"
+          ],
+          [
+            "primary",
+            "secondary"
+          ],
+          true,
+          false
+        ],
+        [
+          "==",
+          [
+            "get",
+            "brunnel"
+          ],
+          "bridge"
+        ]
+      ],
+      "layout": {
+        "line-cap": "butt",
+        "line-join": "round"
+      },
+      "paint": {
+        "line-color": "#ccc8c0",
+        "line-width": [
+          "interpolate",
+          [
+            "exponential",
+            2
+          ],
+          [
+            "zoom"
+          ],
+          14,
+          3.07,
+          22,
+          784.99
+        ],
+        "line-opacity": 1.0
+      }
+    },
+    {
+      "id": "road-walkable-fill-wide-bridge",
+      "type": "line",
+      "source": "openmaptiles",
+      "source-layer": "transportation",
+      "minzoom": 15,
+      "filter": [
+        "all",
+        [
+          "match",
+          [
+            "get",
+            "class"
+          ],
+          [
+            "tertiary"
+          ],
+          true,
+          false
+        ],
+        [
+          "==",
+          [
+            "get",
+            "brunnel"
+          ],
+          "bridge"
+        ]
+      ],
+      "layout": {
+        "line-cap": "butt",
+        "line-join": "round"
+      },
+      "paint": {
+        "line-color": [
+          "case",
+          [
+            "==",
+            [
+              "get",
+              "subclass"
+            ],
+            "pedestrian"
+          ],
+          "#c08040",
+          [
+            "==",
+            [
+              "get",
+              "subclass"
+            ],
+            "living_street"
+          ],
+          "#c08040",
+          [
+            "==",
+            [
+              "get",
+              "class"
+            ],
+            "minor"
+          ],
+          "#c08040",
+          [
+            "==",
+            [
+              "get",
+              "class"
+            ],
+            "residential"
+          ],
+          "#c08040",
+          [
+            "==",
+            [
+              "get",
+              "class"
+            ],
+            "service"
+          ],
+          "#c08040",
+          [
+            "==",
+            [
+              "get",
+              "class"
+            ],
+            "tertiary"
+          ],
+          "#c08040",
+          [
+            "==",
+            [
+              "get",
+              "class"
+            ],
+            "track"
+          ],
+          "#c08040",
+          "#c08040"
+        ],
+        "line-width": [
+          "interpolate",
+          [
+            "exponential",
+            2
+          ],
+          [
+            "zoom"
+          ],
+          15,
+          3.68,
+          22,
+          471.0
+        ],
+        "line-opacity": 1.0
+      }
+    },
+    {
+      "id": "road-walkable-fill-mid-bridge",
+      "type": "line",
+      "source": "openmaptiles",
+      "source-layer": "transportation",
+      "minzoom": 15,
+      "filter": [
+        "all",
+        [
+          "match",
+          [
+            "get",
+            "class"
+          ],
+          [
+            "minor",
+            "residential",
+            "unclassified",
+            "living_street"
+          ],
+          true,
+          false
+        ],
+        [
+          "==",
+          [
+            "get",
+            "brunnel"
+          ],
+          "bridge"
+        ]
+      ],
+      "layout": {
+        "line-cap": "butt",
+        "line-join": "round"
+      },
+      "paint": {
+        "line-color": [
+          "case",
+          [
+            "==",
+            [
+              "get",
+              "subclass"
+            ],
+            "pedestrian"
+          ],
+          "#c08040",
+          [
+            "==",
+            [
+              "get",
+              "subclass"
+            ],
+            "living_street"
+          ],
+          "#c08040",
+          [
+            "==",
+            [
+              "get",
+              "class"
+            ],
+            "minor"
+          ],
+          "#c08040",
+          [
+            "==",
+            [
+              "get",
+              "class"
+            ],
+            "residential"
+          ],
+          "#c08040",
+          [
+            "==",
+            [
+              "get",
+              "class"
+            ],
+            "service"
+          ],
+          "#c08040",
+          [
+            "==",
+            [
+              "get",
+              "class"
+            ],
+            "tertiary"
+          ],
+          "#c08040",
+          [
+            "==",
+            [
+              "get",
+              "class"
+            ],
+            "track"
+          ],
+          "#c08040",
+          "#c08040"
+        ],
+        "line-width": [
+          "interpolate",
+          [
+            "exponential",
+            2
+          ],
+          [
+            "zoom"
+          ],
+          15,
+          2.76,
+          22,
+          353.25
+        ],
+        "line-opacity": 1.0
+      }
+    },
+    {
+      "id": "road-walkable-fill-pedestrian-bridge",
+      "type": "line",
+      "source": "openmaptiles",
+      "source-layer": "transportation",
+      "minzoom": 15,
+      "filter": [
+        "all",
+        [
+          "match",
+          [
+            "get",
+            "class"
+          ],
+          [
+            "pedestrian"
+          ],
+          true,
+          false
+        ],
+        [
+          "==",
+          [
+            "get",
+            "brunnel"
+          ],
+          "bridge"
+        ]
+      ],
+      "layout": {
+        "line-cap": "butt",
+        "line-join": "round"
+      },
+      "paint": {
+        "line-color": [
+          "case",
+          [
+            "==",
+            [
+              "get",
+              "subclass"
+            ],
+            "pedestrian"
+          ],
+          "#c08040",
+          [
+            "==",
+            [
+              "get",
+              "subclass"
+            ],
+            "living_street"
+          ],
+          "#c08040",
+          [
+            "==",
+            [
+              "get",
+              "class"
+            ],
+            "minor"
+          ],
+          "#c08040",
+          [
+            "==",
+            [
+              "get",
+              "class"
+            ],
+            "residential"
+          ],
+          "#c08040",
+          [
+            "==",
+            [
+              "get",
+              "class"
+            ],
+            "service"
+          ],
+          "#c08040",
+          [
+            "==",
+            [
+              "get",
+              "class"
+            ],
+            "tertiary"
+          ],
+          "#c08040",
+          [
+            "==",
+            [
+              "get",
+              "class"
+            ],
+            "track"
+          ],
+          "#c08040",
+          "#c08040"
+        ],
+        "line-width": [
+          "interpolate",
+          [
+            "exponential",
+            2
+          ],
+          [
+            "zoom"
+          ],
+          15,
+          2.45,
+          22,
+          314.0
+        ],
+        "line-opacity": 1.0
+      }
+    },
+    {
+      "id": "road-walkable-fill-narrow-bridge",
+      "type": "line",
+      "source": "openmaptiles",
+      "source-layer": "transportation",
+      "minzoom": 15,
+      "filter": [
+        "all",
+        [
+          "match",
+          [
+            "get",
+            "class"
+          ],
+          [
+            "service",
+            "track"
+          ],
+          true,
+          false
+        ],
+        [
+          "==",
+          [
+            "get",
+            "brunnel"
+          ],
+          "bridge"
+        ]
+      ],
+      "layout": {
+        "line-cap": "butt",
+        "line-join": "round"
+      },
+      "paint": {
+        "line-color": [
+          "case",
+          [
+            "==",
+            [
+              "get",
+              "subclass"
+            ],
+            "pedestrian"
+          ],
+          "#c08040",
+          [
+            "==",
+            [
+              "get",
+              "subclass"
+            ],
+            "living_street"
+          ],
+          "#c08040",
+          [
+            "==",
+            [
+              "get",
+              "class"
+            ],
+            "minor"
+          ],
+          "#c08040",
+          [
+            "==",
+            [
+              "get",
+              "class"
+            ],
+            "residential"
+          ],
+          "#c08040",
+          [
+            "==",
+            [
+              "get",
+              "class"
+            ],
+            "service"
+          ],
+          "#c08040",
+          [
+            "==",
+            [
+              "get",
+              "class"
+            ],
+            "tertiary"
+          ],
+          "#c08040",
+          [
+            "==",
+            [
+              "get",
+              "class"
+            ],
+            "track"
+          ],
+          "#c08040",
+          "#c08040"
+        ],
+        "line-width": [
+          "interpolate",
+          [
+            "exponential",
+            2
+          ],
+          [
+            "zoom"
+          ],
+          15,
+          1.23,
+          22,
+          157.0
+        ],
+        "line-opacity": 1.0
       }
     },
     {
