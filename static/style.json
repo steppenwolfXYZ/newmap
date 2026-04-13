@@ -5069,13 +5069,13 @@
             "zoom"
           ],
           5,
-          2.2,
+          2.8,
           10,
-          4.2,
+          5.2,
           13,
-          5.6,
+          7.0,
           15,
-          6.4
+          8.0
         ],
         "circle-opacity": [
           "interpolate",
@@ -5113,11 +5113,11 @@
             "zoom"
           ],
           10,
-          0.9,
+          1.1,
           13,
-          2.2,
+          2.8,
           15,
-          3.2
+          4.0
         ],
         "circle-opacity": [
           "interpolate",
@@ -5155,11 +5155,11 @@
             "zoom"
           ],
           9,
-          1.1,
+          1.4,
           13,
-          2.6,
+          3.3,
           15,
-          3.6
+          4.5
         ],
         "circle-opacity": [
           "interpolate",
@@ -5174,7 +5174,18 @@
           10.0,
           1.0
         ]
-      }
+      },
+      "filter": [
+        "all",
+        [
+          "!=",
+          [
+            "get",
+            "mode"
+          ],
+          "ferry"
+        ]
+      ]
     },
     {
       "id": "transit-stop-fill-transit_stops_bus",
@@ -5197,11 +5208,11 @@
             "zoom"
           ],
           11,
-          0.7,
+          0.9,
           13,
-          1.6,
+          2.0,
           15,
-          2.6
+          3.3
         ],
         "circle-opacity": [
           "interpolate",
@@ -5214,6 +5225,56 @@
           11,
           0.0,
           12.0,
+          1.0
+        ]
+      }
+    },
+    {
+      "id": "transit-stop-fill-ferry",
+      "type": "circle",
+      "source": "transit_stops_regional",
+      "source-layer": "transit_stops",
+      "minzoom": 9,
+      "maxzoom": 16,
+      "filter": [
+        "==",
+        [
+          "get",
+          "mode"
+        ],
+        "ferry"
+      ],
+      "paint": {
+        "circle-color": [
+          "get",
+          "color"
+        ],
+        "circle-radius": [
+          "interpolate",
+          [
+            "linear"
+          ],
+          [
+            "zoom"
+          ],
+          9,
+          4.1,
+          13,
+          9.8,
+          15,
+          13.5
+        ],
+        "circle-opacity": [
+          "interpolate",
+          [
+            "linear"
+          ],
+          [
+            "zoom"
+          ],
+          9,
+          0.0,
+          10.0,
           1.0
         ]
       }
