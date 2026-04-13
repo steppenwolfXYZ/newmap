@@ -4687,7 +4687,7 @@
       "type": "line",
       "source": "transit_lines",
       "source-layer": "transit_lines",
-      "minzoom": 6,
+      "minzoom": 5,
       "filter": [
         "all",
         [
@@ -4729,7 +4729,7 @@
           [
             "zoom"
           ],
-          6,
+          5,
           [
             "*",
             [
@@ -4769,9 +4769,9 @@
           [
             "zoom"
           ],
-          6,
+          5,
           0.0,
-          7.5,
+          6.5,
           0.9
         ]
       }
@@ -4781,7 +4781,7 @@
       "type": "line",
       "source": "transit_lines",
       "source-layer": "transit_lines",
-      "minzoom": 6,
+      "minzoom": 5,
       "filter": [
         "all",
         [
@@ -4826,7 +4826,7 @@
           [
             "zoom"
           ],
-          6,
+          5,
           [
             "*",
             [
@@ -4858,192 +4858,9 @@
           [
             "zoom"
           ],
-          6,
+          5,
           0.0,
-          7.5,
-          0.85
-        ]
-      }
-    },
-    {
-      "id": "transit-intercity-casing",
-      "type": "line",
-      "source": "transit_lines",
-      "source-layer": "transit_lines",
-      "minzoom": 4,
-      "filter": [
-        "all",
-        [
-          "==",
-          [
-            "get",
-            "mode"
-          ],
-          "intercity"
-        ],
-        [
-          "==",
-          [
-            "get",
-            "gtfs_matched"
-          ],
-          true
-        ]
-      ],
-      "layout": {
-        "line-cap": "round",
-        "line-join": "round",
-        "line-sort-key": [
-          "coalesce",
-          [
-            "get",
-            "speed_kmh"
-          ],
-          0
-        ]
-      },
-      "paint": {
-        "line-color": "#ffffff",
-        "line-width": [
-          "interpolate",
-          [
-            "linear"
-          ],
-          [
-            "zoom"
-          ],
-          4,
-          [
-            "*",
-            [
-              "get",
-              "width_base"
-            ],
-            1.0
-          ],
-          14,
-          [
-            "+",
-            [
-              "get",
-              "width_base"
-            ],
-            1.5
-          ],
-          18,
-          [
-            "+",
-            [
-              "*",
-              [
-                "get",
-                "width_base"
-              ],
-              4.0
-            ],
-            2.0
-          ]
-        ],
-        "line-opacity": [
-          "interpolate",
-          [
-            "linear"
-          ],
-          [
-            "zoom"
-          ],
-          4,
-          0.0,
-          5.5,
-          0.9
-        ]
-      }
-    },
-    {
-      "id": "transit-intercity",
-      "type": "line",
-      "source": "transit_lines",
-      "source-layer": "transit_lines",
-      "minzoom": 4,
-      "filter": [
-        "all",
-        [
-          "==",
-          [
-            "get",
-            "mode"
-          ],
-          "intercity"
-        ],
-        [
-          "==",
-          [
-            "get",
-            "gtfs_matched"
-          ],
-          true
-        ]
-      ],
-      "layout": {
-        "line-cap": "round",
-        "line-join": "round",
-        "line-sort-key": [
-          "coalesce",
-          [
-            "get",
-            "speed_kmh"
-          ],
-          0
-        ]
-      },
-      "paint": {
-        "line-color": [
-          "get",
-          "color"
-        ],
-        "line-width": [
-          "interpolate",
-          [
-            "linear"
-          ],
-          [
-            "zoom"
-          ],
-          4,
-          [
-            "*",
-            [
-              "get",
-              "width_base"
-            ],
-            0.4
-          ],
-          14,
-          [
-            "get",
-            "width_base"
-          ],
-          18,
-          [
-            "*",
-            [
-              "get",
-              "width_base"
-            ],
-            4.0
-          ]
-        ],
-        "line-opacity": [
-          "interpolate",
-          [
-            "linear"
-          ],
-          [
-            "zoom"
-          ],
-          4,
-          0.0,
-          5.5,
+          6.5,
           0.85
         ]
       }
