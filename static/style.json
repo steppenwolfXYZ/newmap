@@ -25,6 +25,10 @@
     "transit_stops_bus": {
       "type": "vector",
       "url": "pmtiles:///tl_stops_bus.pmtiles"
+    },
+    "transit_stop_pills": {
+      "type": "vector",
+      "url": "pmtiles:///tl_stop_pills.pmtiles"
     }
   },
   "glyphs": "https://tiles.openfreemap.org/fonts/{fontstack}/{range}.pbf",
@@ -4871,7 +4875,6 @@
       "source": "transit_stops_rail",
       "source-layer": "transit_stops",
       "minzoom": 5,
-      "maxzoom": 16,
       "paint": {
         "circle-color": [
           "get",
@@ -4886,13 +4889,28 @@
             "zoom"
           ],
           5,
-          2.8,
-          10,
-          5.2,
-          13,
-          7.0,
-          15,
-          8.0
+          [
+            "*",
+            [
+              "get",
+              "width_base"
+            ],
+            0.4
+          ],
+          14,
+          [
+            "get",
+            "width_base"
+          ],
+          18,
+          [
+            "*",
+            [
+              "get",
+              "width_base"
+            ],
+            4.0
+          ]
         ],
         "circle-opacity": [
           "interpolate",
@@ -4915,7 +4933,6 @@
       "source": "transit_stops_tram",
       "source-layer": "transit_stops",
       "minzoom": 10,
-      "maxzoom": 16,
       "paint": {
         "circle-color": [
           "get",
@@ -4930,11 +4947,28 @@
             "zoom"
           ],
           10,
-          1.1,
-          13,
-          2.8,
-          15,
-          4.0
+          [
+            "*",
+            [
+              "get",
+              "width_base"
+            ],
+            0.4
+          ],
+          14,
+          [
+            "get",
+            "width_base"
+          ],
+          18,
+          [
+            "*",
+            [
+              "get",
+              "width_base"
+            ],
+            4.0
+          ]
         ],
         "circle-opacity": [
           "interpolate",
@@ -4957,7 +4991,6 @@
       "source": "transit_stops_regional",
       "source-layer": "transit_stops",
       "minzoom": 9,
-      "maxzoom": 16,
       "paint": {
         "circle-color": [
           "get",
@@ -4972,11 +5005,28 @@
             "zoom"
           ],
           9,
-          1.4,
-          13,
-          3.3,
-          15,
-          4.5
+          [
+            "*",
+            [
+              "get",
+              "width_base"
+            ],
+            0.4
+          ],
+          14,
+          [
+            "get",
+            "width_base"
+          ],
+          18,
+          [
+            "*",
+            [
+              "get",
+              "width_base"
+            ],
+            4.0
+          ]
         ],
         "circle-opacity": [
           "interpolate",
@@ -5010,7 +5060,6 @@
       "source": "transit_stops_bus",
       "source-layer": "transit_stops",
       "minzoom": 11,
-      "maxzoom": 16,
       "paint": {
         "circle-color": [
           "get",
@@ -5025,11 +5074,28 @@
             "zoom"
           ],
           11,
-          0.9,
-          13,
-          2.0,
-          15,
-          3.3
+          [
+            "*",
+            [
+              "get",
+              "width_base"
+            ],
+            0.4
+          ],
+          14,
+          [
+            "get",
+            "width_base"
+          ],
+          18,
+          [
+            "*",
+            [
+              "get",
+              "width_base"
+            ],
+            4.0
+          ]
         ],
         "circle-opacity": [
           "interpolate",
@@ -5052,7 +5118,6 @@
       "source": "transit_stops_regional",
       "source-layer": "transit_stops",
       "minzoom": 9,
-      "maxzoom": 16,
       "filter": [
         "==",
         [
@@ -5075,11 +5140,28 @@
             "zoom"
           ],
           9,
-          4.1,
-          13,
-          9.8,
-          15,
-          13.5
+          [
+            "*",
+            [
+              "get",
+              "width_base"
+            ],
+            0.4
+          ],
+          14,
+          [
+            "get",
+            "width_base"
+          ],
+          18,
+          [
+            "*",
+            [
+              "get",
+              "width_base"
+            ],
+            4.0
+          ]
         ],
         "circle-opacity": [
           "interpolate",
@@ -5094,6 +5176,281 @@
           10.0,
           1.0
         ]
+      }
+    },
+    {
+      "id": "transit-stop-pill-casing",
+      "type": "line",
+      "source": "transit_stop_pills",
+      "source-layer": "transit_stop_pills",
+      "minzoom": 11,
+      "filter": [
+        "==",
+        [
+          "get",
+          "feature_type"
+        ],
+        "pill"
+      ],
+      "layout": {
+        "line-cap": "round",
+        "line-join": "round"
+      },
+      "paint": {
+        "line-color": "#ffffff",
+        "line-width": [
+          "interpolate",
+          [
+            "linear"
+          ],
+          [
+            "zoom"
+          ],
+          11,
+          [
+            "*",
+            [
+              "get",
+              "width_base"
+            ],
+            2.3
+          ],
+          14,
+          [
+            "+",
+            [
+              "*",
+              [
+                "get",
+                "width_base"
+              ],
+              2
+            ],
+            1.5
+          ],
+          18,
+          [
+            "+",
+            [
+              "*",
+              [
+                "get",
+                "width_base"
+              ],
+              8.0
+            ],
+            2.0
+          ]
+        ],
+        "line-opacity": [
+          "interpolate",
+          [
+            "linear"
+          ],
+          [
+            "zoom"
+          ],
+          11,
+          0.0,
+          12.0,
+          1.0
+        ]
+      }
+    },
+    {
+      "id": "transit-stop-pill-fill",
+      "type": "line",
+      "source": "transit_stop_pills",
+      "source-layer": "transit_stop_pills",
+      "minzoom": 11,
+      "filter": [
+        "==",
+        [
+          "get",
+          "feature_type"
+        ],
+        "pill"
+      ],
+      "layout": {
+        "line-cap": "round",
+        "line-join": "round"
+      },
+      "paint": {
+        "line-color": [
+          "get",
+          "color"
+        ],
+        "line-width": [
+          "interpolate",
+          [
+            "linear"
+          ],
+          [
+            "zoom"
+          ],
+          11,
+          [
+            "*",
+            [
+              "get",
+              "width_base"
+            ],
+            0.8
+          ],
+          14,
+          [
+            "*",
+            [
+              "get",
+              "width_base"
+            ],
+            2
+          ],
+          18,
+          [
+            "*",
+            [
+              "get",
+              "width_base"
+            ],
+            8.0
+          ]
+        ],
+        "line-opacity": [
+          "interpolate",
+          [
+            "linear"
+          ],
+          [
+            "zoom"
+          ],
+          11,
+          0.0,
+          12.0,
+          1.0
+        ]
+      }
+    },
+    {
+      "id": "transit-stop-pill-connector",
+      "type": "line",
+      "source": "transit_stop_pills",
+      "source-layer": "transit_stop_pills",
+      "minzoom": 11,
+      "filter": [
+        "==",
+        [
+          "get",
+          "feature_type"
+        ],
+        "connector"
+      ],
+      "layout": {
+        "line-cap": "round",
+        "line-join": "round"
+      },
+      "paint": {
+        "line-color": [
+          "get",
+          "color"
+        ],
+        "line-width": [
+          "interpolate",
+          [
+            "linear"
+          ],
+          [
+            "zoom"
+          ],
+          11,
+          [
+            "*",
+            [
+              "get",
+              "width_base"
+            ],
+            0.4
+          ],
+          14,
+          [
+            "*",
+            [
+              "get",
+              "width_base"
+            ],
+            1
+          ],
+          18,
+          [
+            "*",
+            [
+              "get",
+              "width_base"
+            ],
+            4.0
+          ]
+        ],
+        "line-opacity": [
+          "interpolate",
+          [
+            "linear"
+          ],
+          [
+            "zoom"
+          ],
+          11,
+          0.0,
+          12.0,
+          1.0
+        ]
+      }
+    },
+    {
+      "id": "debug-stop-dot-transit_stops_rail",
+      "type": "circle",
+      "source": "transit_stops_rail",
+      "source-layer": "transit_stops",
+      "minzoom": 5,
+      "paint": {
+        "circle-color": "#000000",
+        "circle-radius": 1.5,
+        "circle-opacity": 0.8
+      }
+    },
+    {
+      "id": "debug-stop-dot-transit_stops_tram",
+      "type": "circle",
+      "source": "transit_stops_tram",
+      "source-layer": "transit_stops",
+      "minzoom": 10,
+      "paint": {
+        "circle-color": "#000000",
+        "circle-radius": 1.5,
+        "circle-opacity": 0.8
+      }
+    },
+    {
+      "id": "debug-stop-dot-transit_stops_regional",
+      "type": "circle",
+      "source": "transit_stops_regional",
+      "source-layer": "transit_stops",
+      "minzoom": 9,
+      "paint": {
+        "circle-color": "#000000",
+        "circle-radius": 1.5,
+        "circle-opacity": 0.8
+      }
+    },
+    {
+      "id": "debug-stop-dot-transit_stops_bus",
+      "type": "circle",
+      "source": "transit_stops_bus",
+      "source-layer": "transit_stops",
+      "minzoom": 11,
+      "paint": {
+        "circle-color": "#000000",
+        "circle-radius": 1.5,
+        "circle-opacity": 0.8
       }
     },
     {
