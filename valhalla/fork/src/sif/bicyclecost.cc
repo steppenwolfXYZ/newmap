@@ -10,26 +10,28 @@
 // with a "kora fork:" comment so a VALHALLA_REF bump can re-apply it onto
 // the new upstream copy.
 //
-// Model in one paragraph: an edge's cost is its riding time multiplied by
-// a tier factor — great (separated cycle infrastructure, slight bonus),
-// fine (painted lanes, quiet streets, living streets: the plateau, all
-// ≈ 1.0, so among fine options the shorter/faster one wins) or bad
-// (through-traffic roads without infrastructure, multi-lane roads:
-// significant penalty, calibrated so a real alternative wins but absurd
-// detours do not) — plus the stock hill-avoidance term and the stock
-// surface term. Official cycle routes (OSM relation membership, the
-// graph's bike_network bit) earn a small multiplicative bonus. Stairs are
-// priced steeply, uphill more than downhill, and `exclude_steps` removes
-// them entirely. Edges that are walkable but not ridable in the travel
-// direction — sidewalks, crossings, pedestrian zones, oneways against us —
-// are traversable by pushing the bike at walking pace — honest time, free
-// up to kPushFreeMeters, per-metre penalized beyond so only LONG pushes
-// are discouraged; the fork's triplegbuilder overlay reports those
-// sections as pedestrian-mode maneuvers so the client can draw them
-// dotted. Transitions keep upstream's turn-time model and add the
-// crossing rule: moving from one through-traffic road onto another costs
-// extra unless it is a right turn; straight ahead it costs only across a
-// traffic signal (the proxy for "a real crossing of two big roads").
+// Model in one paragraph: an edge's cost is its honest riding time — an
+// everyday constant-power speed curve (halves around 3 % climb) prices
+// hills, so altitude avoids itself — multiplied by a quality factor:
+// great (separated infrastructure, slight bonus), fine (painted lanes,
+// quiet streets: the plateau, ≈ 1.0, shorter/faster wins) or, for bare
+// through roads, a speed-limit-driven factor (30 km/h free … 80 km/h
+// heavy); grades on through roads are capped against DEM artifacts.
+// Official cycle routes earn a small bonus; destination-only carries no
+// penalty; ferries and car shuttles ride at their service speed plus a
+// boarding wait, with on-board kilometres priced high so crossings win
+// only against disproportionate detours. Walkable-but-not-ridable edges
+// are pushed: honest grade-aware walking time, a per-section allowance,
+// per-metre penalties beyond, sac_scale/surface guards (T2 heavy, T3+
+// and impassable rock refused). Stairs cost hauling time plus committing
+// fees at 2 m / 4 m; `exclude_steps` removes them. Transitions keep
+// upstream's turn-time model and add: a flat per-turn cost, a cost-only
+// deviation penalty for leaving the intuitive continuation (same-class
+// roughly-straight, else near-class exactly-straight), and the crossing
+// rule — turning between through roads at a real multi-lane crossing
+// (4+ through arms) costs per lane; T-junctions and roundabouts are
+// exempt. The fork's triplegbuilder overlay reports pushed sections as
+// pedestrian-mode maneuvers so the client can draw them dotted.
 //
 // Request options: everything upstream accepts still parses. `use_roads`
 // is accepted for compatibility but inert — the tier model replaces what
@@ -206,6 +208,19 @@ constexpr uint32_t kFlatGradeIndex = 6;
 // section — the forward transition cannot see whether the predecessor
 // was pushed — so a section chopped into short edges collects a little
 // extra slack; calibrate kPushPenaltySecPerM with that in mind.
+// ── Alpine terrain (sac_scale) ──────────────────────────────────────────
+// The international OSM hiking scale, baked per edge. T1 is fine —
+// ridable, even. T2 carries a very hard cost factor (riding or pushing
+// a bike on a mountain-hiking path is a last resort). T3 and above are
+// refused outright: no bike belongs there, pushed or not — the Gabi
+// Klettersteig (T5, bridge-tagged, grade data flattened by upstream's
+// bridge clamp) is the canonical case grade limits provably cannot
+// catch. Impassable SURFACE (the graph attribute Valhalla derives from
+// OSM surface + smoothness, keeping the worst) additionally refuses
+// pushing — the pushed branch waives the surface bar, which is right
+// for gravel and wrong for rock.
+constexpr float kSacT2CostFactor = 4.0f;
+
 constexpr float kPushSpeedKph = 4.5f;
 // Pushing uphill is slower AND deserves extra discouragement — shoving
 // a bike up a slope is the worst part of any route. The speed factor
@@ -933,6 +948,7 @@ protected:
                uint16_t disallow_mask = kDisallowNone) const override {
     return DynamicCost::Allowed(edge, tile, disallow_mask) && !edge->bss_connection() &&
            edge->use() != Use::kSteps &&
+           edge->sac_scale() < SacScale::kDemandingMountainHiking &&
            (avoid_bad_surfaces_ != 1.0f || edge->surface() <= worst_allowed_surface_);
   }
 };
@@ -1041,9 +1057,16 @@ bool BicycleCost::Allowed(const baldr::DirectedEdge* edge,
     return false;
   }
 
+  // kora fork: no bike on T3+ terrain, ridden or pushed.
+  if (edge->sac_scale() >= SacScale::kDemandingMountainHiking) {
+    return false;
+  }
+
   // Prohibit certain roads based on surface type and bicycle type.
-  // kora fork: not while pushing — on foot any surface is fine.
-  if (edge->surface() > worst_allowed_surface_ && !is_pushed(edge)) {
+  // kora fork: not while pushing — on foot any surface is fine, EXCEPT
+  // impassable (rock, rungs — not pushable either).
+  if (edge->surface() > worst_allowed_surface_ &&
+      (!is_pushed(edge) || edge->surface() == Surface::kImpassable)) {
     return false;
   }
   return DynamicCost::EvaluateRestrictions(access_mask_, edge, is_dest, tile, edgeid, current_time,
@@ -1079,9 +1102,15 @@ bool BicycleCost::AllowedReverse(const baldr::DirectedEdge* edge,
     return false;
   }
 
+  // kora fork: no bike on T3+ terrain, ridden or pushed.
+  if (opp_edge->sac_scale() >= SacScale::kDemandingMountainHiking) {
+    return false;
+  }
+
   // Prohibit certain roads based on surface type and bicycle type.
-  // kora fork: not while pushing.
-  if (edge->surface() > worst_allowed_surface_ && !is_pushed(opp_edge)) {
+  // kora fork: not while pushing — except impassable surface.
+  if (edge->surface() > worst_allowed_surface_ &&
+      (!is_pushed(opp_edge) || edge->surface() == Surface::kImpassable)) {
     return false;
   }
   return DynamicCost::EvaluateRestrictions(access_mask_, opp_edge, false, tile, opp_edgeid,
@@ -1148,12 +1177,21 @@ Cost BicycleCost::EdgeCost(const baldr::DirectedEdge* edge,
     if (pg >= kora::kPushUphillGradeIndex) {
       per_m += kora::kPushUphillExtraSecPerM;
     }
-    return {shortest_ ? edge->length() : sec + edge->length() * per_m, sec};
+    float cost = sec + edge->length() * per_m;
+    // kora fork: T2 terrain — last resort, pushed or not.
+    if (edge->sac_scale() == SacScale::kMountainHiking) {
+      cost *= kora::kSacT2CostFactor;
+    }
+    return {shortest_ ? edge->length() : cost, sec};
   }
 
   // kora fork: tier factor + official-route bonus + hills + surface.
   const uint32_t grade = effective_grade(edge);
   float factor = tier_factor(classify(edge), edge);
+  // T2 terrain: ridable in principle, a last resort in practice.
+  if (edge->sac_scale() == SacScale::kMountainHiking) {
+    factor *= kora::kSacT2CostFactor;
+  }
   if (edge->bike_network()) {
     factor *= kora::kBikeNetworkFactor;
   }

@@ -172,6 +172,16 @@ Additional signals:
   unparsed preference) and priced the crossing as pedaling a fake
   alpine grade — which is how Bern→Valais routes ended up over Grimsel
   instead of through the Lötschberg.
+- **Alpine terrain** (the international OSM `sac_scale`, T1–T6, baked
+  per edge): T1 is fine, even ridable, no penalty. T2 carries a very
+  hard cost factor — riding or pushing there is a last resort. T3 and
+  above refuse the bike outright, ridden or pushed. This is the guard
+  grade limits provably cannot replace: the elevation model smears
+  cliffs, and upstream flattens bridge-tagged edges — the Gabi
+  Klettersteig (T5) read as a 3 % grade. Additionally, an impassable
+  SURFACE (the graph's single surface attribute, worst of OSM surface
+  and smoothness) refuses pushing — the pushed branch's surface waiver
+  is right for gravel and wrong for rock.
 - **Hills — honest time, not avoidance.** The primary hill mechanism
   is a realistic grade→speed curve for an everyday utility rider at
   constant comfortable power: speed halves around a 3 % climb (not the

@@ -47,29 +47,47 @@
 	// ── Elevation profile (selected card only) ─────────────────────────
 	// Inline SVG polyline over the profile samples; light area fill under
 	// the line. Y spans the route's own min/max with a small floor so a
-	// flat route doesn't blow jitter up to full height.
+	// flat route doesn't blow jitter up to full height. Samples get a
+	// small moving-average pass so DEM noise doesn't jitter the line, and
+	// the y range keeps half the stroke width free at top and bottom so a
+	// min/max plateau renders at full thickness (vertical viewBox scale is
+	// ~1:1 with CSS px, so PROFILE_PAD is effectively screen px).
 	const PROFILE_W = 280;
 	const PROFILE_H = 56;
 	const MIN_SPAN_M = 30;
+	const PROFILE_PAD = 1.5;
+	const SMOOTH_RADIUS = 4;
 
 	let profileData = $derived.by(() => {
-		const p = route.profile;
-		if (!p || p.length < 2) return null;
+		const raw = route.profile;
+		if (!raw || raw.length < 2) return null;
+		const p = raw.map((_, i) => {
+			let sum = 0;
+			let n = 0;
+			for (let j = i - SMOOTH_RADIUS; j <= i + SMOOTH_RADIUS; j++) {
+				if (j < 0 || j >= raw.length) continue;
+				sum += raw[j];
+				n++;
+			}
+			return sum / n;
+		});
 		const min = Math.min(...p);
 		const max = Math.max(...p);
 		const span = Math.max(max - min, MIN_SPAN_M);
 		const mid = (max + min) / 2;
 		const lo = mid - span / 2;
+		const innerH = PROFILE_H - 2 * PROFILE_PAD;
 		const pts = p.map((v, i) => {
 			const x = (i / (p.length - 1)) * PROFILE_W;
-			const y = PROFILE_H - ((v - lo) / span) * PROFILE_H;
+			const y = PROFILE_H - PROFILE_PAD - ((v - lo) / span) * innerH;
 			return `${x.toFixed(1)},${y.toFixed(1)}`;
 		});
 		return {
 			line: pts.join(' '),
 			area: `0,${PROFILE_H} ${pts.join(' ')} ${PROFILE_W},${PROFILE_H}`,
-			minLabel: `${Math.round(min)} m`,
-			maxLabel: `${Math.round(max)} m`
+			// Labels report the real extremes, not the smoothed ones.
+			minLabel: `${Math.round(Math.min(...raw))} m`,
+			maxLabel: `${Math.round(Math.max(...raw))} m`
 		};
 	});
 </script>
@@ -272,11 +290,13 @@
 		width: 100%;
 		height: 3.5rem;
 	}
-	.drc-profile-area { fill: var(--gray-100); }
+	.drc-profile-area { fill: color-mix(in srgb, var(--brand) 16%, var(--white)); }
 	.drc-profile-line {
 		fill: none;
-		stroke: var(--anthracite);
-		stroke-width: 1.5;
+		stroke: var(--brand);
+		stroke-width: 2.5;
+		stroke-linejoin: round;
+		stroke-linecap: round;
 		vector-effect: non-scaling-stroke;
 	}
 	.drc-profile-labels {

@@ -184,6 +184,14 @@ const selWidth = (stops: [number, number, number][]) =>
 function addLayers(map: maplibregl.Map, mode: 'bike' | 'walk') {
 	const color = mode === 'bike' ? BIKE_COLOR : WALK_COLOR;
 	const muted = mode === 'bike' ? BIKE_MUTED : WALK_MUTED;
+	// Anchor the whole overlay below the place-label block: bike/walk
+	// mode shows the standard view, and city/town names must stay
+	// readable above the route. label-country is the first of the three
+	// place-label layers (country → state → place), so anchoring there
+	// keeps all of them on top while POI and street labels stay beneath
+	// the route. Each addLayer below inserts before the same anchor, so
+	// their relative order is their add order, unchanged.
+	const beforeId = map.getLayer('label-country') ? 'label-country' : undefined;
 	// Endpoint connectors go in first — under every route layer.
 	map.addLayer({
 		id: DIRECT_CONN_LAYER,
@@ -196,7 +204,7 @@ function addLayers(map: maplibregl.Map, mode: 'bike' | 'walk') {
 			'line-width': ['interpolate', ['linear'], ['zoom'], 6, 2, 12, 2.5, 16, 4] as any,
 			'line-dasharray': PUSHED_DASH as any
 		}
-	});
+	}, beforeId);
 	// Alternates' pushed dashes go in FIRST, below the casing and line
 	// layers — a separate layer per selection state is the only way to
 	// keep an alternate's dashes from painting over the selected route
@@ -213,7 +221,7 @@ function addLayers(map: maplibregl.Map, mode: 'bike' | 'walk') {
 			'line-width': selWidth(LINE_WIDTH_STOPS),
 			'line-dasharray': PUSHED_DASH as any
 		}
-	});
+	}, beforeId);
 	// Bike routes get the map's white casing like transit legs; walk
 	// routes stay the casing-less dashed neutral line every walking leg
 	// uses. Widths sit in the transit route overlay's band so a direct
@@ -230,7 +238,7 @@ function addLayers(map: maplibregl.Map, mode: 'bike' | 'walk') {
 				'line-width': selWidth(CASING_WIDTH_STOPS),
 				'line-opacity': selCase(1, 0.7) as any
 			}
-		});
+		}, beforeId);
 	}
 	map.addLayer({
 		id: DIRECT_LINE_LAYER,
@@ -244,7 +252,7 @@ function addLayers(map: maplibregl.Map, mode: 'bike' | 'walk') {
 			...(mode === 'walk' ? { 'line-dasharray': [1.4, 1.4] as any } : {}),
 			'line-opacity': mode === 'walk' ? 0.9 : 1
 		}
-	});
+	}, beforeId);
 	// Pushed-bike sections (bicycle-costing-fork.md § pushed-bike): the
 	// transit walking legs' dashed language — short dashes with round
 	// caps, nothing painted behind them. A per-dash white border is NOT
@@ -263,7 +271,7 @@ function addLayers(map: maplibregl.Map, mode: 'bike' | 'walk') {
 			'line-width': selWidth(LINE_WIDTH_STOPS),
 			'line-dasharray': PUSHED_DASH as any
 		}
-	});
+	}, beforeId);
 	if (!handlersInstalled) {
 		for (const id of [DIRECT_LINE_LAYER, DIRECT_PUSHED_LAYER, DIRECT_PUSHED_MUTED_LAYER]) {
 			map.on('click', id, onLineClick);
