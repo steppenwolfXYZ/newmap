@@ -131,6 +131,11 @@ const MANEUVER_STEPS_ENTER = 40;
 const MANEUVER_FERRY_ENTER = 28;
 
 function costingOptions(args: DirectRouteArgs): Record<string, unknown> {
+	// A border crossing costs a couple of minutes on a bike or on foot —
+	// slow down, maybe show ID — not the engine's default 10 (sized for
+	// cars queueing at customs; it made an 11-minute descent to Paglino
+	// read as 24).
+	const COUNTRY_CROSSING_COST_SEC = 120;
 	if (args.mode === 'bike') {
 		// Hills price themselves through the fork's everyday grade→speed
 		// curve (bicycle-costing-fork.md § Hills); use_hills only scales
@@ -138,7 +143,13 @@ function costingOptions(args: DirectRouteArgs): Record<string, unknown> {
 		// 0.1 keeps that near full strength until the hilliness
 		// preference ships. Hybrid bike ≈ everyday utility cycling
 		// (18 km/h base).
-		return { bicycle: { bicycle_type: 'hybrid', use_hills: 0.1 } };
+		return {
+			bicycle: {
+				bicycle_type: 'hybrid',
+				use_hills: 0.1,
+				country_crossing_cost: COUNTRY_CROSSING_COST_SEC
+			}
+		};
 	}
 	// Stairs are a normal part of walking: zero the engine's default 30 s
 	// per-flight penalty (pedestrian-bicycle-routing.md § Pedestrian
@@ -159,7 +170,8 @@ function costingOptions(args: DirectRouteArgs): Record<string, unknown> {
 	const pedestrian: Record<string, unknown> = {
 		step_penalty: 0,
 		use_ferry: 0.17,
-		use_rail_ferry: 0
+		use_rail_ferry: 0,
+		country_crossing_cost: COUNTRY_CROSSING_COST_SEC
 	};
 	// Match the transit tab's walking-speed tier so a direct walk and a
 	// transit walking leg of the same length agree on duration.
