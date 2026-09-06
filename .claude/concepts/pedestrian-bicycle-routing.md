@@ -42,6 +42,19 @@ not reachable from the client and has no UI.
   (lighter/desaturated).
 - Selection is two-way: tapping an alternative's card selects it, and
   tapping a muted route line on the map selects its card.
+- For each ferry / car-shuttle crossing aboard the winning route, one
+  extra query avoids that single crossing (others stay usable). The
+  land variant is judged by DISTANCE ratio, in three bands: within
+  ~1.25× it becomes the suggested route itself (the crossing demoted
+  to an alternative — riding is the sporting default when the detour
+  is modest); within ~1.5× it joins as an alternative; beyond that it
+  is not offered (circumnavigating a lake or the Lötschberg massif).
+  Distance, not time, on purpose: a mountain pass instead of a shuttle
+  rides similar kilometres in many more hours and must stay on offer.
+  Crossing routes carry a chip — "ferry" for ships, "car shuttle" for
+  an Autoverlad; a train through a mountain is never called a ferry.
+  The elevation profile and ascent totals treat on-board sections as
+  flat (the DEM samples the massif above a tunnel, not the ride).
 
 ### 3. Result cards
 
@@ -69,11 +82,12 @@ One card per route, analogous to the transit connection cards:
   direction of travel. On the map, pushed sections are drawn dotted —
   the walking-leg visual language; the cards do not call them out.
   Weighting details live in `bicycle-costing-fork.md`.
-- **Stairs:** heavily penalized, upward more than downward. An
-  **avoid-stairs toggle** removes them entirely. The toggle is
-  **mandatory for V1** — stairs are an absolute no-go for e-bikes,
-  which are increasingly the norm; bicycle routing does not ship
-  without it.
+- **Stairs:** short stubs cost only their carry time; long staircases
+  are heavily penalized, upward more than downward (length rule in
+  `bicycle-costing-fork.md`). An **avoid-stairs toggle** removes them
+  entirely. The toggle is **mandatory for V1** — stairs are an
+  absolute no-go for e-bikes, which are increasingly the norm; bicycle
+  routing does not ship without it.
 
 ### 4a. Route quality & weighting requirements
 
@@ -89,7 +103,10 @@ penalty, cycle-route-relation signal, benchmark set) is specified in
 
 ### 5. Pedestrian costing behavior
 
-- Sensible defaults; stairs allowed. (Step-free pedestrian routing is
+- Sensible defaults; stairs allowed and entirely unpenalized — a
+  normal part of walking, no warning on the cards either. Avoiding them
+  belongs to the later wheelchair / stroller mode. (Step-free
+  pedestrian routing is
   owned by `routing-options.md` § Step-free mode and is out of scope
   here.)
 

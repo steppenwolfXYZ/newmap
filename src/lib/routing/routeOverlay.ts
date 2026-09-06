@@ -56,14 +56,15 @@ function routeFramePadding(): maplibregl.PaddingOptions {
 async function frameRouteBounds(
 	getMap: () => maplibregl.Map | null,
 	bb: [number, number, number, number] | null,
-	maxZoom: number
+	maxZoom: number,
+	padding?: maplibregl.PaddingOptions
 ) {
 	await tick();
 	const map = getMap();
 	if (!bb || !map) return;
 	map.fitBounds(
 		[[bb[0], bb[1]], [bb[2], bb[3]]],
-		{ padding: routeFramePadding(), maxZoom, duration: 600 }
+		{ padding: padding ?? routeFramePadding(), maxZoom, duration: 600 }
 	);
 }
 
@@ -76,8 +77,10 @@ async function frameRouteBounds(
 function viaUics(): Set<string> {
 	return new Set(
 		routingState.vias
-			.filter((v) => v.station !== null)
-			.map((v) => v.station!.uic)
+			// Station filter is type-level only — the transit overlay never
+			// sees point vias (they exist on the direct tabs alone).
+			.filter((v) => v.station?.type === 'station')
+			.map((v) => (v.station as { uic: string }).uic)
 	);
 }
 
@@ -99,14 +102,16 @@ export function frameItinerary(
 	void frameRouteBounds(getMap, geo.bbox, 15);
 }
 
-/** Deferred whole-bbox framing with the route padding — shared with the
- * direct cycling / walking overlay (directRouteOverlay.ts). */
+/** Deferred whole-bbox framing — shared with the direct cycling /
+ * walking overlay (directRouteOverlay.ts), which passes its own padding
+ * on narrow screens (bottom sheet instead of the map-mode header). */
 export function frameDirectBounds(
 	getMap: () => maplibregl.Map | null,
 	bb: [number, number, number, number] | null,
-	maxZoom: number
+	maxZoom: number,
+	padding?: maplibregl.PaddingOptions
 ) {
-	void frameRouteBounds(getMap, bb, maxZoom);
+	void frameRouteBounds(getMap, bb, maxZoom, padding);
 }
 
 /** The "route is the primary content" basemap treatment, shared by the

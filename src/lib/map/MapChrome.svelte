@@ -17,8 +17,8 @@
 	import { isNarrow } from '../routing/layout';
 	import { mapUi } from './uiState.svelte';
 	import {
-		exitLineDetailView, focusSelectedLeg, frameSelectedItinerary,
-		frameShownDirectRoutes
+		exitLineDetailView, focusSelectedLeg, frameSelectedDirect,
+		frameSelectedItinerary, frameShownDirectRoutes
 	} from './orchestration.svelte';
 </script>
 
@@ -41,12 +41,25 @@
 	<RouteMapHeader />
 {/if}
 {#if routingState.open}
-	<div class="top-controls" class:hidden-in-map-mode={routingState.mapMode}>
+	<!-- direct-sheet: narrow-screen bottom sheet for cycling / walking
+	     results — the wrapper flips to the bottom edge so the map above
+	     stays visible and interactive (rule in the narrow media query;
+	     desktop layout is unaffected by the class). -->
+	<div
+		class="top-controls"
+		class:hidden-in-map-mode={routingState.mapMode}
+		class:direct-sheet={
+			routingState.travelMode !== 'transit'
+			&& routingState.hasQueried
+			&& !routingState.directSheetExpanded
+		}
+	>
 		<RoutingPanel
 			onFocusLeg={focusSelectedLeg}
 			onEnterMapMode={frameSelectedItinerary}
 			onFrameRoute={frameSelectedItinerary}
 			onFrameDirectRoutes={frameShownDirectRoutes}
+			onFrameDirectRoute={frameSelectedDirect}
 			getMapCenter={() => {
 				const c = mapUi.mapRef?.getCenter();
 				return c ? ([c.lng, c.lat] as [number, number]) : null;
@@ -141,6 +154,12 @@
 			top: 0;
 			left: 0;
 			right: 0;
+		}
+		/* Direct-mode bottom sheet: the wrapper hugs the bottom edge (its
+		   height is the sheet's own), leaving the map above it live. */
+		:global(.map-wrap.routing-active) .top-controls.direct-sheet {
+			top: auto;
+			bottom: 0;
 		}
 	}
 

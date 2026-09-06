@@ -12,13 +12,18 @@ This step adds `foot=yes` to any way tagged `access=agricultural` or
 per-profile access_override picks it up as a foot-whitelist.
 
 For the Valhalla output it additionally tags under-passing highways
-(`layer<0`, no tunnel) as `tunnel=yes`. Valhalla samples elevation from
+(`layer<0` or `cutting=*`, no tunnel) as `tunnel=yes`. Valhalla samples elevation from
 a ~30 m DEM, which sees the structure a road passes UNDER — underpasses
 come out as fake 10-15 % climbs (canonical case: Schwarzenburgstrasse
 under the rail line at Weissenstein, a level ride that priced like a
 mountain). Tunnel and bridge edges are exempt from DEM sampling —
 Valhalla interpolates their elevation endpoint to endpoint — so marking
-under-passing ways as tunnels buys exactly that treatment. The tag is a
+under-passing ways as tunnels buys exactly that treatment. Cuttings
+count as under-passing: the canonical Weissenstein case carries only
+`cutting=yes` — the rail bridge above holds the layer tag, the road
+below has none. Genuine hillside cuttings on mountain roads lose
+nothing: their endpoints stay real DEM heights, only the interior is
+linearized per way. The tag is a
 routing-graph fiction that never reaches the map or MOTIS; its only
 other Valhalla effect is the (unused) exclude_tunnels request option.
 See bicycle-costing-fork.md § grade cap for the query-time fallback that
@@ -84,13 +89,16 @@ def _read_overlay(path: Path):
 
 def _underpass_fix(tags: dict) -> bool:
     """True when the way needs tunnel=yes for sane elevation: a highway
-    below ground level (layer<0) that is neither tunnel nor bridge. An
-    explicit tunnel=no still qualifies — the tag speaks to semantics, but
-    the DEM is poisoned either way."""
+    below ground level (layer<0 or a cutting) that is neither tunnel nor
+    bridge. An explicit tunnel=no still qualifies — the tag speaks to
+    semantics, but the DEM is poisoned either way. cutting=no does not
+    qualify (explicitly not below ground)."""
     if "highway" not in tags:
         return False
     if tags.get("tunnel", "no") != "no" or "bridge" in tags:
         return False
+    if tags.get("cutting", "no") != "no":
+        return True
     try:
         return int(tags.get("layer", "0")) < 0
     except ValueError:

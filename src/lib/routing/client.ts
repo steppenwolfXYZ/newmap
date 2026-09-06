@@ -125,10 +125,15 @@ export async function plan(args: PlanArgs, signal?: AbortSignal): Promise<PlanRe
 	params.set('maxPreTransitTime', String(args.maxPreTransitTime ?? 1800));
 	params.set('maxPostTransitTime', String(args.maxPostTransitTime ?? 1800));
 	// Via stops (via-stops.md). Stop ids only — the engine rejects
-	// coordinates here, which is why vias are always stations. The
-	// per-via minimum stay rides along in the same order; 0 means the
-	// traveller may stay on board (no forced vehicle change).
-	const vias = args.vias ?? [];
+	// coordinates here, which is why transit vias are always stations.
+	// The station filter is type-level: point vias exist only on the
+	// direct tabs, which never call plan(). The per-via minimum stay
+	// rides along in the same order; 0 means the traveller may stay on
+	// board (no forced vehicle change).
+	const vias = (args.vias ?? []).filter(
+		(v): v is FilledVia & { station: StationEndpoint } =>
+			v.station.type === 'station'
+	);
 	if (vias.length > 0) {
 		params.set('via', vias.map((v) => stationPlaceId(v.station)).join(','));
 		params.set('viaMinimumStay', vias.map((v) => String(Math.round(v.wait))).join(','));

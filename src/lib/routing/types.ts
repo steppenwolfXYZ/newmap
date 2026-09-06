@@ -49,12 +49,27 @@ export interface DirectRoute {
 	/** Metres of stairs on the route (bike: sections to carry / push the
 	 * bike over; summed from the steps maneuvers). 0 when none. */
 	stairsM: number;
+	/** Metres aboard water ferries (the ~30 min boarding wait is already
+	 * inside durationSec). Car-shuttle trains are counted separately in
+	 * shuttleM — a train through a mountain is not a ferry. */
+	ferryM: number;
+	/** Metres aboard car-shuttle trains (Autoverlad — Lötschberg, Furka,
+	 * Vereina). Split from ferryM by the service name, since the engine
+	 * reports both crossing kinds identically. */
+	shuttleM: number;
+	/** Midpoint [lon, lat] of each ferry / shuttle crossing aboard this
+	 * route — one per boarding, in route order. Drives the per-crossing
+	 * avoid-this-ferry variant queries. */
+	ferryCrossings: [number, number][];
 	/** The query's requested endpoints, [lon, lat] — where the user
 	 * actually wants to go, BEFORE Valhalla snapped onto the street
 	 * network. The map pins sit here; a thin walking connector bridges
 	 * to `coords[0]` / the last coord (the snapped points). */
 	requestedFrom: [number, number];
 	requestedTo: [number, number];
+	/** Requested via points in route order, [lon, lat] — the via pins on
+	 * the map. Empty for a via-less query. */
+	requestedVias: [number, number][];
 	/** Bike only: [start, end] index ranges into `coords` where the bike
 	 * is pushed (walkable-but-not-ridable sections — the fork reports
 	 * them as pedestrian-mode maneuvers, bicycle-costing-fork.md). The
@@ -63,18 +78,28 @@ export interface DirectRoute {
 	pushedRanges: [number, number][];
 }
 
-/** The `station` variant of Endpoint, pulled out because via stops can
- * only ever be stations (via-stops.md § Via stops — the routing engine
+/** The `station` variant of Endpoint, pulled out because transit via
+ * stops can only ever be stations (via-stops.md § Via stops — MOTIS
  * accepts stop ids for vias, never coordinates). */
 export type StationEndpoint = Extract<Endpoint, { type: 'station' }>;
 
+/** What a via row may hold. Transit vias are stations only (an engine
+ * constraint); the direct cycling / walking tabs also accept points
+ * (addresses / POIs) — Valhalla routes through coordinates natively.
+ * Current location is never a via. Switching to the transit tab drops
+ * point vias (state.svelte.ts setTravelMode). */
+export type ViaEndpoint = StationEndpoint | Extract<Endpoint, { type: 'point' }>;
+
 /** One via stop of the route (via-stops.md). `station` is null while the
  * row exists in the panel but has not been filled yet — such a row is
- * ignored by the query and never serialised. `wait` is the REQUESTED
- * minimum stay in whole minutes; 0 means "pass through" (the traveller
- * may stay on board and no vehicle change is forced). */
+ * ignored by the query and never serialised. (The field name predates
+ * point vias and is kept for stored-recents compatibility.) `wait` is
+ * the REQUESTED minimum stay in whole minutes; 0 means "pass through"
+ * (the traveller may stay on board and no vehicle change is forced).
+ * Direct-mode vias always carry wait 0 — there is no timetable to wait
+ * for. */
 export interface Via {
-	station: StationEndpoint | null;
+	station: ViaEndpoint | null;
 	wait: number;
 }
 

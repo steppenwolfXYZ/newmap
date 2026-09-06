@@ -19,7 +19,7 @@ import {
 } from '../routing/routeOverlay';
 import {
 	enterDirectRouteOverlay, exitDirectRouteOverlay, disposeDirectRouteOverlay,
-	directOverlayActive, frameDirectRoutes
+	directOverlayActive, frameDirectRoutes, frameSelectedDirectRoute
 } from '../routing/directRouteOverlay';
 import type { Endpoint, Itinerary, Leg } from '../routing/types';
 import { installClickPopups, type RouteEndpointRequest } from './popups/handlers';
@@ -91,6 +91,10 @@ export const frameSelectedItinerary = (it: Itinerary) =>
 /** Frame all shown direct cycling / walking alternatives — the direct
  * modes' map-mode entry / reframe (pedestrian-bicycle-routing.md). */
 export const frameShownDirectRoutes = () => frameDirectRoutes(() => mapUi.mapRef);
+
+/** Frame the selected direct alternative — a card click re-centers the
+ * picked route on the map. */
+export const frameSelectedDirect = () => frameSelectedDirectRoute(() => mapUi.mapRef);
 
 /** Popup Route from/to button → routing endpoint. Station endpoints
  * need the feed's parent stop id (`pid`, SLOID scheme) for the MOTIS

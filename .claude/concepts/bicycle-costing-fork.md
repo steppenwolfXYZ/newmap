@@ -107,6 +107,12 @@ Edges are weighted by a three-tier quality model:
 
 Additional signals:
 
+- **Turn cost:** every real direction change costs a few seconds of
+  time and cost — tight turns force braking, and a route with many
+  turns is harder to navigate. Left turns cost more than right (they
+  cross traffic); roundabout circulation is exempt. Keeps zigzag mazes
+  through quiet grids from tying with a straight corridor of equal
+  length.
 - **Crossing penalty:** a transition where both roads are
   through-traffic class costs extra; right turns are exempt, and so
   are roundabouts — a Kreisel is the safe way across a big road, not a
@@ -128,6 +134,25 @@ Additional signals:
   engine's stock default priced them like a ~3 km detour, which chased
   routes out of entire quiet quarters — the Bern benchmark's Mühlematt
   quarter is the canonical case.)
+- **Ferries and car shuttles** (Lötschberg / Furka / Vereina
+  Autoverlad; all carry bikes) are usable and priced identically: time
+  on board from the service's own speed, a flat expected boarding wait
+  (30 min), and a deliberately high per-kilometre on-board cost — every
+  kilometre aboard must be bought by saving several kilometres of
+  riding. That encodes the sporting rule: a crossing wins only where
+  the land alternative is disproportionately worse (the roadless
+  Lötschberg hop, a short lake crossing saving a huge detour), never as
+  a shortcut past ridable ground (the through-shuttle to Iselle under
+  the Simplon pass, a long lake cruise beside a shore road). Whenever a
+  crossing wins anyway, the client offers per-crossing land variants,
+  judged by distance rather than time and preferred outright when the
+  detour is modest (bands in the main concept's § Query &
+  alternatives) — so riding stays the sporting default and the rider
+  makes the call. The stock engine
+  effectively banned car shuttles for bikes (a six-hour penalty from an
+  unparsed preference) and priced the crossing as pedaling a fake
+  alpine grade — which is how Bern→Valais routes ended up over Grimsel
+  instead of through the Lötschberg.
 - **Hills — honest time, not avoidance.** The primary hill mechanism
   is a realistic grade→speed curve for an everyday utility rider at
   constant comfortable power: speed halves around a 3 % climb (not the
@@ -152,18 +177,28 @@ Additional signals:
   next tile rebuild, and the cap stays as the fallback thereafter.
   Known interim cost: sustained alpine climbs on primary roads read a
   touch too fast.
-- **Stairs:** heavily penalized by default, upward more than
-  downward — replacing stock's flat 8× factor. A costing option
-  excludes them entirely — this backs the V1-mandatory avoid-stairs
-  toggle.
+- **Stairs:** length-based, like pushing — a short stub (a few steps
+  between two lanes; the graph is full of them, and the mapped stairs
+  often sit beside an unmapped ramp) costs only its carry time, while
+  every metre beyond a small free length is heavily penalized, upward
+  more than downward, so a real staircase stays a last resort. A
+  costing option excludes them entirely — this backs the V1-mandatory
+  avoid-stairs toggle.
 - **Pushed-bike access** — a core requirement, not a follow-up: without
   it whole neighbourhoods route nonsensically (the Bern benchmark's
   Zieglerstrasse crossing is the canonical case). Any edge that is
   walkable but not ridable is traversable by pushing the bike: foot-only
   ways (sidewalks, crossings, pedestrian zones) and streets that are
   oneway against the direction of travel. Pushing happens at walking
-  pace and is priced above riding, so a push wins only where the riding
-  alternatives are clearly worse. Pushed sections are reported to the
+  pace; SHORT pushes cost nothing beyond their honest time — they are
+  often genuinely the best move — while pushed metres beyond a small
+  free allowance (~20 m) accrue a per-metre penalty, so it is LONG
+  pushes that get discouraged (on climbs riding is barely faster than
+  pushing, and without the length rule footpath shortcuts crept into
+  hilly routes). The allowance counts per push SECTION — contiguous
+  pushed edges uninterrupted by riding — never per edge: the graph
+  chops footways into fragments, and a per-edge allowance made long
+  pushes free. Pushed sections are reported to the
   client as walking-mode segments; the map draws them dotted (the same
   visual language as walking legs). The connection cards do not mention
   them. Implemented at query time — access to the walkable graph is

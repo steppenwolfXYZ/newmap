@@ -17,9 +17,9 @@ import { reverseAddress } from '$lib/geocoding/client';
 import {
 	activeVias, MAX_VIAS, MAX_VIA_WAIT_MIN, plannedDwellSec,
 	type DirectRoute, type Endpoint, type FilledVia, type Itinerary,
-	type TimeMode, type TravelMode, type Via
+	type StationEndpoint, type TimeMode, type TravelMode, type Via
 } from './types';
-import { writeRoutingQuery } from './url';
+import { endpointToParam, writeRoutingQuery } from './url';
 
 // Reactive routing state (Svelte 5 runes). One instance shared across the
 // app — Map.svelte and RoutingPanel read from it, entry-point handlers
@@ -104,6 +104,13 @@ let expandedFingerprint = $state<string | null>(null);
 // left via the header's back / details buttons or by the selection
 // clearing (browser back, ×, input change).
 let mapModeFlag = $state(false);
+// Direct-mode bottom sheet on narrow screens: with cycling / walking
+// results the map is the primary content, so the panel docks at the
+// bottom as a compact sheet. `true` = the user expanded it back to the
+// full panel to edit the query; collapses again on every fresh query.
+// Only meaningful while the direct tab has queried — CSS scopes the
+// sheet layout to narrow viewports.
+let directSheetExpanded = $state(false);
 
 // Shared-connection view (connection-sharing.md § Shared view). `sharedShare`
 // holds the share document while a /s/<id> landing drives the panel;
@@ -193,9 +200,14 @@ function queryVias(): FilledVia[] {
 
 /** via-stops.md § Planned dwell: parent-stop id → requested wait in
  * seconds, so ranking can tell deliberate stop-time from dead time.
- * `null` when no via asks for a wait — nothing downstream has to branch. */
+ * `null` when no via asks for a wait — nothing downstream has to branch.
+ * The station guard is type-level: waits exist on the transit tab only,
+ * where vias are always stations. */
 function viaWaitByStop(): Map<string, number> | null {
-	const withWait = queryVias().filter((v) => v.wait > 0);
+	const withWait = queryVias().filter(
+		(v): v is FilledVia & { station: StationEndpoint } =>
+			v.wait > 0 && v.station.type === 'station'
+	);
 	if (withWait.length === 0) return null;
 	return new Map(withWait.map((v) => [stationPlaceId(v.station), v.wait * 60]));
 }
@@ -215,9 +227,10 @@ export function rankOptionsFor(): {
 /** Signature of everything about the vias the query can see — used to
  * decide whether a via edit actually invalidates the shown results.
  * Adding or dropping an EMPTY row changes nothing and must not wipe the
- * result list. */
+ * result list. endpointToParam covers both via kinds (station → UIC,
+ * point → coord token). */
 function viaSignature(): string {
-	return queryVias().map((v) => `${v.station.uic}:${v.wait}`).join(',');
+	return queryVias().map((v) => `${endpointToParam(v.station)}:${v.wait}`).join(',');
 }
 
 /** Shared tail of every via edit: only an edit the QUERY can see drops the
@@ -700,6 +713,9 @@ async function runDirectQuery(key: string) {
 	resetCascadeState();
 	directRoutes = [];
 	directSelected = 0;
+	// A fresh query always lands collapsed — the map with the new routes
+	// is what the user asked for.
+	directSheetExpanded = false;
 	try {
 		if (from!.type === 'current' || to!.type === 'current') {
 			try { resolvedCurrentCoord = await resolveCurrent(); }
@@ -711,10 +727,15 @@ async function runDirectQuery(key: string) {
 		}
 		const coordOf = (ep: Endpoint): [number, number] =>
 			ep.type === 'current' ? (resolvedCurrentCoord ?? [0, 0]) : ep.coord;
+		const vias = queryVias();
 		const routes = await fetchDirectRoutes({
 			mode: m,
 			from: coordOf(from!),
 			to: coordOf(to!),
+			// Via points ride as coordinates — stations use their (platform-
+			// snapped) coord, points their own (direct-mode vias accept
+			// both; see ViaEndpoint in types.ts).
+			vias: vias.map((v) => v.station.coord),
 			// Walking pace follows the transit tab's speed tier so the same
 			// walk shows the same duration on both tabs (null at the normal
 			// tier → engine default 5.1 km/h, identical to the transit base).
@@ -726,7 +747,7 @@ async function runDirectQuery(key: string) {
 		directRoutes = routes;
 		directSelected = 0;
 		if (routes.length > 0 && from && to) {
-			void recordRecentRoute(from, to, [], mode, null);
+			void recordRecentRoute(from, to, vias, mode, null);
 			connectStations.record(from);
 			connectStations.record(to);
 		}
@@ -760,6 +781,7 @@ export const routingState = {
 		if (travelMode === 'transit') return null;
 		return directRoutes[directSelected] ?? null;
 	},
+	get directSheetExpanded() { return directSheetExpanded; },
 	get time() { return time; },
 	get timeVersion() { return timeVersion; },
 	get results() { return results; },
@@ -897,6 +919,12 @@ export const routingState = {
 		from = next.from;
 		to = next.to;
 		vias = next.vias ? next.vias.slice(0, MAX_VIAS) : [];
+		// A recent recorded on a direct tab can carry point vias — the
+		// transit tab can't express them (same rule as setTravelMode), so
+		// they drop rather than ride as silently ignored rows.
+		if (travelMode === 'transit') {
+			vias = vias.filter((v) => !v.station || v.station.type === 'station');
+		}
 		mode = next.mode;
 		time = next.time;
 		timeVersion++;
@@ -936,12 +964,16 @@ export const routingState = {
 	},
 
 	/** The To row's `+`: the current destination becomes the last via and
-	 * a fresh empty destination opens below it. Only a station can make
-	 * that move — vias are stations by construction. */
+	 * a fresh empty destination opens below it. Only an endpoint the tab
+	 * accepts as a via can make that move — stations everywhere, points
+	 * on the direct tabs too (ViaEndpoint). */
 	promoteToToVia(): boolean {
-		if (!to || to.type !== 'station' || vias.length >= MAX_VIAS) return false;
+		if (!to || vias.length >= MAX_VIAS) return false;
+		const ok = to.type === 'station'
+			|| (travelMode !== 'transit' && to.type === 'point');
+		if (!ok) return false;
 		abortInFlight();
-		vias = [...vias, { station: to, wait: 0 }];
+		vias = [...vias, { station: to as Exclude<Endpoint, { type: 'current' }>, wait: 0 }];
 		to = null;
 		results = [];
 		directRoutes = [];
@@ -954,13 +986,16 @@ export const routingState = {
 		return true;
 	},
 
-	/** Fill (or blank) one via row. Only stations are accepted; anything
-	 * else empties the row rather than silently changing its meaning. */
+	/** Fill (or blank) one via row. Transit accepts stations only; the
+	 * direct tabs also accept points (ViaEndpoint). Anything else empties
+	 * the row rather than silently changing its meaning. */
 	setVia(index: number, ep: Endpoint | null) {
 		const row = vias[index];
 		if (!row) return;
 		const before = viaSignature();
-		const station = ep && ep.type === 'station' ? ep : null;
+		const ok = ep && (ep.type === 'station'
+			|| (travelMode !== 'transit' && ep.type === 'point'));
+		const station = ok ? (ep as Exclude<Endpoint, { type: 'current' }>) : null;
 		vias = vias.map((v, i) => (i === index ? { ...v, station } : v));
 		commitViaEdit(before);
 	},
@@ -1006,6 +1041,14 @@ export const routingState = {
 		if (travelMode === m) return;
 		abortInFlight();
 		travelMode = m;
+		// Point vias only exist on the direct tabs (ViaEndpoint) — the
+		// transit engine takes stop ids, so those rows drop on entry.
+		// Waits stay put in the other direction: the direct tabs simply
+		// ignore them (no control, not queried, not serialised), so a tab
+		// round-trip never loses a transit errand plan.
+		if (m === 'transit') {
+			vias = vias.filter((v) => !v.station || v.station.type === 'station');
+		}
 		if (opts?.persist !== false) {
 			try {
 				localStorage.setItem(TRAVEL_MODE_KEY, m);
@@ -1030,6 +1073,16 @@ export const routingState = {
 	selectDirectRoute(index: number) {
 		if (index < 0 || index >= directRoutes.length) return;
 		directSelected = index;
+	},
+
+	/** Expand the narrow-screen direct-mode bottom sheet back to the full
+	 * panel (edit the query); collapse returns to the docked sheet. */
+	expandDirectSheet() {
+		directSheetExpanded = true;
+	},
+
+	collapseDirectSheet() {
+		directSheetExpanded = false;
 	},
 
 	setMode(m: TimeMode) {
@@ -1250,7 +1303,7 @@ export const routingState = {
 		// request can see.
 		if (travelMode !== 'transit') {
 			const directKey = JSON.stringify({
-				travel: travelMode, from, to,
+				travel: travelMode, from, to, vias: viaSignature(),
 				walkSpeed: travelMode === 'walk' ? routingOptions.walkSpeed : null
 			});
 			if (directKey === lastQueryKey && !error) return;

@@ -19,22 +19,26 @@
 		/** Frame the whole alternatives set (mobile map-mode entry /
 		 * desktop reframe). */
 		onFrameRoutes?: () => void;
+		/** Frame just this card's route — every card click re-centers
+		 * the picked (or re-picked) route on the map. */
+		onFrameRoute?: () => void;
 	}
 
-	let { route, index, onFrameRoutes }: Props = $props();
+	let { route, index, onFrameRoutes, onFrameRoute }: Props = $props();
 
 	let selected = $derived(routingState.directSelected === index);
 
 	function pick() {
 		routingState.selectDirectRoute(index);
+		onFrameRoute?.();
 	}
 
-	// Map icon: on mobile enter fullscreen map mode (the full-width list
-	// hides the map otherwise); on desktop reframe the overview.
+	// Map icon: on mobile collapse the panel back to the bottom sheet
+	// (the map above it is the point); on desktop reframe the overview.
 	function showOnMap(e: Event) {
 		e.stopPropagation();
 		routingState.selectDirectRoute(index);
-		if (isNarrow()) routingState.enterMapMode();
+		if (isNarrow()) routingState.collapseDirectSheet();
 		onFrameRoutes?.();
 	}
 
@@ -105,12 +109,32 @@
 				&#8593;&nbsp;{route.ascentM}&thinsp;m &#8595;&nbsp;{route.descentM}&thinsp;m
 			</span>
 		{/if}
-		{#if route.stairsM > 0}
+		{#if route.ferryM > 0}
+			<span
+				class="drc-stat drc-ferry"
+				title={`Includes ${fmtDistance(route.ferryM)} aboard a ferry (boarding wait included)`}
+			>
+				ferry {fmtDistance(route.ferryM)}
+			</span>
+		{/if}
+		{#if route.shuttleM > 0}
+			<!-- A car-shuttle train (Autoverlad) — deliberately never called
+			     a ferry. Crossing-free variants join the cards when the
+			     detour is reasonable. -->
+			<span
+				class="drc-stat drc-ferry"
+				title={`Includes ${fmtDistance(route.shuttleM)} aboard a car-shuttle train (boarding wait included)`}
+			>
+				car shuttle {fmtDistance(route.shuttleM)}
+			</span>
+		{/if}
+		{#if route.stairsM > 0 && route.mode === 'bike'}
+			<!-- Bike-only: stairs mean pushing / carrying. On foot stairs
+			     are unremarkable and get no call-out (the wheelchair /
+			     stroller mode will handle avoidance, not a warning). -->
 			<span
 				class="drc-stat drc-stairs"
-				title={route.mode === 'bike'
-					? `Includes ${fmtDistance(route.stairsM)} of stairs — push or carry the bike`
-					: `Includes ${fmtDistance(route.stairsM)} of stairs`}
+				title={`Includes ${fmtDistance(route.stairsM)} of stairs — push or carry the bike`}
 			>
 				stairs {fmtDistance(route.stairsM)}
 			</span>
@@ -219,11 +243,13 @@
 		color: var(--brand);
 	}
 	.card-map:hover { background: #f3e2e5; }
-	@media (min-width: 700px) {
-		.card.selected .card-map { background: var(--brand); }
-		.card.selected .card-map :global(.material-symbols-outlined) { color: var(--white); }
-		.card.selected .card-map:hover { background: var(--brand-hover); }
-	}
+	/* Selected route: the map icon wears the active state on every
+	   width — on mobile the bottom sheet shows the map alongside, so
+	   the filled button marks "this is the route on the map" (and a
+	   tap's sticky :hover no longer leaves the light-red in-between). */
+	.card.selected .card-map { background: var(--brand); }
+	.card.selected .card-map :global(.material-symbols-outlined) { color: var(--white); }
+	.card.selected .card-map:hover { background: var(--brand-hover); }
 
 	.drc-stats {
 		display: flex;
@@ -239,6 +265,7 @@
 		color: var(--gray-850);
 	}
 	.drc-stairs { color: var(--warn); font-size: 0.78rem; }
+	.drc-ferry { color: var(--gray-850); font-size: 0.78rem; }
 
 	.drc-profile svg {
 		display: block;

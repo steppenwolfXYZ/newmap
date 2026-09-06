@@ -22,10 +22,11 @@
 // priced steeply, uphill more than downhill, and `exclude_steps` removes
 // them entirely. Edges that are walkable but not ridable in the travel
 // direction — sidewalks, crossings, pedestrian zones, oneways against us —
-// are traversable by pushing the bike at walking pace, priced above riding
-// (kora::kPushSpeedKph / kPushFactor); the fork's triplegbuilder overlay
-// reports those sections as pedestrian-mode maneuvers so the client can
-// draw them dotted. Transitions keep upstream's turn-time model and add the
+// are traversable by pushing the bike at walking pace — honest time, free
+// up to kPushFreeMeters, per-metre penalized beyond so only LONG pushes
+// are discouraged; the fork's triplegbuilder overlay reports those
+// sections as pedestrian-mode maneuvers so the client can draw them
+// dotted. Transitions keep upstream's turn-time model and add the
 // crossing rule: moving from one through-traffic road onto another costs
 // extra unless it is a right turn; straight ahead it costs only across a
 // traffic signal (the proxy for "a real crossing of two big roads").
@@ -44,6 +45,7 @@
 #include "sif/costconstants.h"
 #include "sif/hierarchylimits.h"
 
+#include <algorithm>
 #include <cassert>
 
 #ifdef INLINE_TEST
@@ -167,24 +169,95 @@ constexpr float kHillStrength = 1.0f;
 constexpr uint32_t kThroughGradeCapIndex = 10; // bucket 10 = 6.5 %
 
 // ── Stairs ──────────────────────────────────────────────────────────────
-// Time: pushing / carrying speeds. Cost: those seconds times a factor that
-// makes ten metres of stairs uphill worth roughly ten minutes of riding.
+// Length-based, like the push rule: a short stair stub (a few steps
+// between two lanes — Bern is full of them) costs only its carry time,
+// while every metre beyond the free length accrues a heavy per-metre
+// penalty, uphill more than downhill — a real staircase stays a last
+// resort. The old flat factor priced a 4 m stub at ~2 minutes of cost,
+// which excluded whole sensible corridors (canonical: the Spiezwiler
+// lane whose 3-step stub outweighed a 100 m walkway push). The free
+// length is per edge; steps are rarely fragmented, and the push-section
+// rebate explicitly excludes them so nothing double-frees.
 // Direction comes from the edge's weighted grade (index 6 = flat); a
-// staircase the elevation model cannot resolve counts as the mean of both.
+// staircase the elevation model cannot resolve counts as the mean.
 constexpr float kStepsSpeedUpKph = 1.5f;
 constexpr float kStepsSpeedDownKph = 2.5f;
-constexpr float kStepsFactorUp = 25.0f;
-constexpr float kStepsFactorDown = 12.0f;
+constexpr float kStairsFreeMeters = 5.0f;
+constexpr float kStairsPenaltyUpSecPerM = 20.0f;
+constexpr float kStairsPenaltyDownSecPerM = 8.0f;
 constexpr uint32_t kFlatGradeIndex = 6;
 
 // ── Pushed bike ─────────────────────────────────────────────────────────
 // Walkable-but-not-ridable edges (foot-only ways; streets oneway against
-// the travel direction) are used at pushing pace. The factor prices the
-// pushed second above a ridden one so a push wins only where the riding
-// alternatives are clearly worse — the Bern benchmark's Zieglerstrasse
-// crossing (a 30 m push saving a 400 m detour) is the calibration case.
+// the travel direction) are used at pushing pace. Short pushes are a
+// genuinely worthwhile option and cost nothing beyond their honest time:
+// the first kPushFreeMeters are penalty-free. Beyond that, every pushed
+// metre accrues kPushPenaltySecPerM of cost, so LONG pushes are what
+// gets discouraged — on a climb, riding is barely faster than pushing,
+// and without this the router cut corners over any footpath (canonical:
+// Spiezwiler's 100 m Sportplatz walkway instead of staying on Stutz,
+// where a 20 m link exists). The allowance is per edge, not per push
+// section — the forward transition cannot see whether the predecessor
+// was pushed — so a section chopped into short edges collects a little
+// extra slack; calibrate kPushPenaltySecPerM with that in mind.
 constexpr float kPushSpeedKph = 4.5f;
-constexpr float kPushFactor = 1.5f;
+// The allowance is per push SECTION (contiguous pushed edges,
+// uninterrupted by riding), not per edge: EdgeCost charges the penalty
+// on every pushed metre, and the transition into the section's first
+// edge grants the allowance back as a rebate. That closes the
+// confetti loophole — Spiezwiler's 100 m walkway is a dozen 2-9 m
+// fragments (several of them the synthetic station-walk welds), and a
+// per-edge allowance made almost all of it free. The rebate is capped
+// at the first edge's own penalty, so a transition+edge relaxation
+// never goes below honest time (the search needs non-negative
+// relaxations); a section whose first fragment is shorter than the
+// allowance loses the remainder — a few seconds, acceptable.
+constexpr float kPushFreeMeters = 20.0f;
+// Sized so penalized pushing costs like moving at ~3 km/h on the flat:
+// time at 4.5 km/h is 0.8 s/m, the penalty adds 0.4 s/m → 1.2 s-cost/m.
+constexpr float kPushPenaltySecPerM = 0.4f;
+
+// ── Ferries & car shuttles ──────────────────────────────────────────────
+// Water ferries and rail ferries (car-shuttle trains — Lötschberg,
+// Furka, Vereina; bicycle=yes in OSM) get the same treatment: on-board
+// time from the edge's own speed (derived from the OSM duration tag)
+// plus a flat expected wait at boarding, plus a cost factor that keeps a
+// ferry from ever beating riding ALONG the shore — it should win only
+// where it genuinely crosses. Upstream instead left the rail-ferry
+// preference unparsed for bicycles, which decayed to "maximally avoid":
+// a 6 h boarding penalty plus pedaling the shuttle's 17 km at the fake
+// alpine grade the DEM gives a way through a mountain — the Lötschberg
+// shuttle priced worse than climbing Grimsel.
+constexpr float kFerryWaitSec = 1800.0f; // expected boarding wait, both kinds
+// Per-second cost multiplier on board. Deliberately high: every km on
+// board must be bought by saving several km of riding, so a short hop
+// across a lake (or the roadless Lötschberg) wins while a long cruise —
+// or the through-shuttle to Iselle, with the Simplon pass above it —
+// loses unless the land alternative is disproportionately worse. The
+// client additionally shows a ferry-free variant whenever a crossing
+// wins, so the sporting choice stays with the rider.
+constexpr float kFerryFactor = 8.0f;
+
+// ── Turns ───────────────────────────────────────────────────────────────
+// Every real direction change costs a few seconds of time AND cost:
+// tight turns force braking, and a route with many turns is harder to
+// navigate — zigzag mazes through quiet grids must not tie with a
+// straight corridor of equal length. Indexed by Turn::Type (straight,
+// slight-right, right, sharp-right, reverse, sharp-left, left,
+// slight-left); left turns cost more than right — they cross traffic
+// (right-hand driving; the map's area is CH). Roundabout circulation is
+// exempt, as with the crossing rule. Amplified by upstream's
+// turn-stress multiplier like the stop-impact seconds.
+constexpr float kTurnSecByType[] = {
+    0.0f,  // straight
+    1.5f,  // slight right
+    3.0f,  // right
+    5.0f,  // sharp right
+    10.0f, // reverse
+    6.0f,  // sharp left
+    5.0f,  // left
+    2.0f   // slight left
+};
 
 // ── Crossings (cost seconds added at the transition) ────────────────────
 // Applied when BOTH the road being left and the road being entered are
@@ -334,6 +407,17 @@ inline bool is_path_like(Use use) {
 inline bool is_pushed(const DirectedEdge* edge) {
   return !(edge->forwardaccess() & kBicycleAccess) &&
          (edge->forwardaccess() & kPedestrianAccess);
+}
+
+// kora fork: uses that continue a push section (the forward search's
+// EdgeLabel exposes only the predecessor's Use, not its access mask, so
+// section starts are detected by use-type: a foot-type predecessor means
+// the push is already running). A RIDDEN bicycle=yes footway before a
+// push misreads as continuation and costs the section its allowance —
+// a few seconds, accepted; the reverse search detects starts exactly.
+inline bool is_foot_use(Use use) {
+  return is_path_like(use) || use == Use::kSteps || use == Use::kPedestrianCrossing ||
+         use == Use::kPlatform;
 }
 
 // Does this edge carry through traffic? Road class decides; cycle
@@ -746,6 +830,13 @@ BicycleCost::BicycleCost(const Costing& costing)
     grade_penalty[i] = kora::kHillStrength * avoid_hills * kora::kSteepDiscomfort[i];
   }
 
+  // kora fork: boarding is priced by kFerryWaitSec in TransitionCost for
+  // both ferry kinds — zero upstream's transition costs so nothing double
+  // counts. In particular the rail-ferry one: with its options unparsed
+  // (disable_rail_ferry_) it decays to the 6 h maximum penalty.
+  ferry_transition_cost_ = {0.0f, 0.0f};
+  rail_ferry_transition_cost_ = {0.0f, 0.0f};
+
   use_hierarchy_limits = false;
 }
 
@@ -839,39 +930,46 @@ Cost BicycleCost::EdgeCost(const baldr::DirectedEdge* edge,
                            const graph_tile_ptr&,
                            const baldr::TimeInfo&,
                            uint8_t&) const {
-  // kora fork: stairs — pushing / carrying time, steep cost, uphill worse.
+  // kora fork: stairs — carry time, free for a short stub, per-metre
+  // penalized beyond (uphill worse). See the kora block for sizing.
   if (edge->use() == Use::kSteps) {
     const uint32_t wg = edge->weighted_grade();
-    float kph, factor;
+    float kph, per_m;
     if (wg > kora::kFlatGradeIndex) {
       kph = kora::kStepsSpeedUpKph;
-      factor = kora::kStepsFactorUp;
+      per_m = kora::kStairsPenaltyUpSecPerM;
     } else if (wg < kora::kFlatGradeIndex) {
       kph = kora::kStepsSpeedDownKph;
-      factor = kora::kStepsFactorDown;
+      per_m = kora::kStairsPenaltyDownSecPerM;
     } else {
       kph = 0.5f * (kora::kStepsSpeedUpKph + kora::kStepsSpeedDownKph);
-      factor = 0.5f * (kora::kStepsFactorUp + kora::kStepsFactorDown);
+      per_m = 0.5f * (kora::kStairsPenaltyUpSecPerM + kora::kStairsPenaltyDownSecPerM);
     }
     const float sec = edge->length() * 3.6f / kph;
-    return {shortest_ ? edge->length() : sec * factor, sec};
+    const float over = std::max(0.0f, static_cast<float>(edge->length()) - kora::kStairsFreeMeters);
+    return {shortest_ ? edge->length() : sec + over * per_m, sec};
   }
 
-  // Ferries are a special case - they use the ferry speed (stored on the edge)
-  if (edge->use() == Use::kFerry) {
-    // Compute elapsed time based on speed. Modulate cost with weighting factors.
+  // kora fork: ferries AND rail ferries (car shuttles) use the ferry
+  // speed stored on the edge — never the bike's grade-driven speed, so a
+  // shuttle through a mountain is immune to the DEM's fake grades. The
+  // boarding wait lives in TransitionCost.
+  if (edge->use() == Use::kFerry || edge->use() == Use::kRailFerry) {
     assert(edge->speed() < kSpeedFactor.size());
     float sec = (edge->length() * kSpeedFactor[edge->speed()]);
-    return {shortest_ ? edge->length() : sec * ferry_factor_, sec};
+    return {shortest_ ? edge->length() : sec * kora::kFerryFactor, sec};
   }
 
   // kora fork: pushed bike — walking pace on edges we may not (or, for
   // bicycle=dismount tagging, must not) ride. The tier model does not
-  // apply on foot; time at pushing pace times kPushFactor is the whole
-  // price.
+  // apply on foot: honest pushing time plus the per-metre penalty on
+  // every metre — the section's free allowance is granted back at its
+  // entry transition (see kPushFreeMeters).
   if (is_pushed(edge) || edge->dismount()) {
     const float sec = edge->length() * 3.6f / kora::kPushSpeedKph;
-    return {shortest_ ? edge->length() : sec * kora::kPushFactor, sec};
+    return {shortest_ ? edge->length()
+                      : sec + edge->length() * kora::kPushPenaltySecPerM,
+            sec};
   }
 
   // kora fork: tier factor + official-route bonus + hills + surface.
@@ -940,8 +1038,31 @@ Cost BicycleCost::TransitionCost(const baldr::DirectedEdge* edge,
     seconds += stopimpact * turn_cost;
   }
 
+  // kora fork: flat per-turn cost (braking + navigation load).
+  if (!edge->roundabout()) {
+    seconds += kora::kTurnSecByType[static_cast<uint32_t>(turn)];
+  }
+
   // kora fork: the crossing rule.
   const float penalty = crossing_penalty(pred.classification(), pred.use(), edge, node, turn);
+
+  // kora fork: expected wait when boarding a ferry / car shuttle. Real
+  // time, so it reaches the displayed duration too.
+  if ((edge->use() == Use::kFerry || edge->use() == Use::kRailFerry) &&
+      pred.use() != Use::kFerry && pred.use() != Use::kRailFerry) {
+    c.secs += kora::kFerryWaitSec;
+    c.cost += kora::kFerryWaitSec;
+  }
+
+  // kora fork: push-section allowance — entering a pushed edge from a
+  // ridden one starts a section; rebate the free metres, capped at this
+  // edge's own penalty so the relaxation stays non-negative. Stairs have
+  // their own free length in EdgeCost and are excluded here.
+  if ((is_pushed(edge) || edge->dismount()) && edge->use() != Use::kSteps &&
+      !is_foot_use(pred.use())) {
+    c.cost -= std::min(kora::kPushFreeMeters, static_cast<float>(edge->length())) *
+              kora::kPushPenaltySecPerM;
+  }
 
   // Return cost (time and penalty)
   c.cost += shortest_ ? 0 : seconds * turn_stress + penalty;
@@ -990,8 +1111,29 @@ Cost BicycleCost::TransitionCostReverse(const uint32_t idx,
     seconds += stopimpact * turn_cost;
   }
 
+  // kora fork: flat per-turn cost (braking + navigation load).
+  if (!edge->roundabout()) {
+    seconds += kora::kTurnSecByType[static_cast<uint32_t>(turn)];
+  }
+
   // kora fork: the crossing rule (pred is the edge being left here too).
   const float penalty = crossing_penalty(pred->classification(), pred->use(), edge, node, turn);
+
+  // kora fork: ferry / car-shuttle boarding wait, as in TransitionCost.
+  if ((edge->use() == Use::kFerry || edge->use() == Use::kRailFerry) &&
+      pred->use() != Use::kFerry && pred->use() != Use::kRailFerry) {
+    c.secs += kora::kFerryWaitSec;
+    c.cost += kora::kFerryWaitSec;
+  }
+
+  // kora fork: push-section allowance, as in TransitionCost — here the
+  // predecessor is a real edge, so section starts are detected exactly.
+  // Stairs have their own free length in EdgeCost, excluded here.
+  if ((is_pushed(edge) || edge->dismount()) && edge->use() != Use::kSteps &&
+      !is_pushed(pred) && !pred->dismount()) {
+    c.cost -= std::min(kora::kPushFreeMeters, static_cast<float>(edge->length())) *
+              kora::kPushPenaltySecPerM;
+  }
 
   // Return cost (time and penalty)
   c.cost += shortest_ ? 0.f : seconds * turn_stress + penalty;

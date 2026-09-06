@@ -54,3 +54,41 @@ pairs:
       Kora fork as of 2026-09-05 (pre-fix): primary 3.38 km / 13 min via
       Balmweg › Bürkiweg › Chutzenstrasse › Morillonstrasse maze;
       alternates via Lentulusstrasse / Weissensteinstrasse, 3.2-3.7 km.
+
+  - id: bern-varzo-loetschberg
+    from: [7.4301984, 46.9406065]   # Eichmattweg 7, Bern
+    to: [8.245121, 46.206231]       # Varzo (I), station area
+    description: >
+      Long alpine relation: the sensible route rides up the Kandertal,
+      loads the bike onto the Lötschberg Autoverlad (Kandersteg →
+      Goppenstein, 15 min, bikes allowed), descends the Valais and
+      crosses the Simplon. Before the ferry/shuttle pricing fix the
+      engine banned the shuttle (6 h unparsed-preference penalty, fake
+      alpine grade on the crossing) and instead boarded two lake ships
+      and climbed Grimsel — 209 km / 18.4 h against 158 km / ~12 h.
+      Also guards the lake-ferry rule: ships must not be used as
+      shortcuts along the lakes.
+    must_include: [Autoverlad]
+    must_exclude: [Beatushöhlen, Giessbach]
+    baseline: >
+      Kora fork 2026-09-05 (pre-fix): 209.5 km / 18.35 h via Thunersee
+      ship (Beatushöhlen–Neuhaus), Brienzersee ship (Giessbach–Brienz),
+      Grimselpass and Simplon. Forced via Kandersteg measured 158.6 km /
+      14.96 h even with the shuttle priced as pedaling.
+
+  - id: spiezwiler-stutz
+    from: [7.666241, 46.683464]     # on the Varzo corridor, north of Spiezwiler
+    to: [7.666288, 46.682001]       # same corridor, south of the school
+    description: >
+      Micro case from the Bern→Varzo corridor at Spiezwiler: the road
+      continues on Stutz with at most a ~20 m walking link, but the
+      router cut across the Sportplatz on a 100 m foot-only walkway —
+      on a climb, pushing is barely slower than riding, so
+      time-only-priced pushing turns steep corners into footpath
+      shortcuts. Guards the long-push rule: pushes are free up to
+      ~20 m, per-metre penalized beyond.
+    must_include: [Stutz]
+    baseline: >
+      Kora fork 2026-09-05 (push priced by time alone): 100 m pushed
+      across the Sportplatz Schulhaus Spiezwiler walkway instead of
+      continuing on Stutz.

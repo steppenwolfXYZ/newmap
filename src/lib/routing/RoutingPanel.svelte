@@ -17,13 +17,18 @@
 	import { itineraryFingerprint } from './fingerprint';
 	import type { Endpoint, Itinerary, Leg } from './types';
 
-	let { onFocusLeg, onEnterMapMode, onFrameRoute, onFrameDirectRoutes, getMapCenter = () => null }: {
+	let {
+		onFocusLeg, onEnterMapMode, onFrameRoute, onFrameDirectRoutes,
+		onFrameDirectRoute, getMapCenter = () => null
+	}: {
 		onFocusLeg?: (leg: Leg) => void;
 		onEnterMapMode?: (it: Itinerary) => void;
 		onFrameRoute?: (it: Itinerary) => void;
 		/** Frame all shown direct cycling / walking alternatives
 		 * (pedestrian-bicycle-routing.md). */
 		onFrameDirectRoutes?: () => void;
+		/** Frame the selected direct alternative (card click re-center). */
+		onFrameDirectRoute?: () => void;
 		getMapCenter?: () => [number, number] | null;
 	} = $props();
 
@@ -31,6 +36,59 @@
 	// § Mode tabs): no time controls, no options, no vias; results are
 	// DirectRouteCards instead of the transit connection cards.
 	let direct = $derived(routingState.travelMode !== 'transit');
+	// Narrow-screen bottom sheet: once a direct query ran, the map is the
+	// primary content, so the panel docks at the bottom as a compact
+	// sheet (collapsed = editing chrome hidden, a from→to summary row on
+	// top). The class only takes effect inside the narrow media query;
+	// desktop keeps the side panel regardless.
+	let sheet = $derived(
+		direct && routingState.hasQueried && !routingState.directSheetExpanded
+	);
+
+	/** Expand the bottom sheet to the full editing panel. The expanded
+	 * panel is content-height, so a strip of map may stay visible below
+	 * it — re-frame the routes into that strip once the layout has
+	 * settled (the framing measures the panel; see directFramePadding). */
+	async function expandSheet() {
+		routingState.expandDirectSheet();
+		await tick();
+		onFrameDirectRoutes?.();
+	}
+
+	// ── Sheet resize drag ──────────────────────────────────────────────
+	// The grab handle drags the collapsed sheet taller: from the default
+	// 46dvh up to the height where the card list needs no scrollbar (the
+	// no-scroll cap is measured at drag start so the handle tracks the
+	// finger without hysteresis). The override rides in --sheet-h on the
+	// panel — sheet mode only; the expanded panel ignores it — and drops
+	// with the panel remount. Pointer capture keeps the drag alive once
+	// the finger leaves the handle.
+	let panelEl: HTMLDivElement | null = $state(null);
+	let sheetDragHeight = $state<number | null>(null);
+	let grabStartY = 0;
+	let grabStartH = 0;
+	let grabMaxH = 0;
+
+	function grabDown(e: PointerEvent) {
+		if (!panelEl) return;
+		grabStartY = e.clientY;
+		grabStartH = panelEl.offsetHeight;
+		const overflow = resultsEl
+			? resultsEl.scrollHeight - resultsEl.clientHeight
+			: 0;
+		grabMaxH = Math.min(
+			grabStartH + overflow, Math.round(window.innerHeight * 0.92));
+		(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+	}
+
+	function grabMove(e: PointerEvent) {
+		if (!(e.currentTarget as HTMLElement).hasPointerCapture(e.pointerId)) return;
+		// Shrinking stops at the default sheet height (or the start height
+		// when the content never reached it).
+		const min = Math.min(Math.round(window.innerHeight * 0.46), grabStartH);
+		sheetDragHeight = Math.max(
+			min, Math.min(grabMaxH, grabStartH + (grabStartY - e.clientY)));
+	}
 
 	// Shared-only mode (connection-sharing.md § Shared view) renders just the
 	// verified shared connection; ranking badges are suppressed there — a
@@ -177,9 +235,11 @@
 	}
 
 	// The To row's `+` demotes the destination to a via and opens a fresh
-	// one below. Only a station can make that move — vias are stations.
+	// one below. Only an endpoint the tab accepts as a via can make that
+	// move — stations everywhere, points on the direct tabs too.
 	let canSplitDestination = $derived(
-		routingState.to?.type === 'station' && routingState.canAddVia
+		(routingState.to?.type === 'station' ||
+			(direct && routingState.to?.type === 'point')) && routingState.canAddVia
 	);
 
 	function splitDestination() {
@@ -525,7 +585,62 @@
 	{/if}
 {/snippet}
 
-<div class="routing-panel" role="dialog" aria-label="Route planning">
+<div
+	class="routing-panel"
+	class:sheet
+	bind:this={panelEl}
+	style:--sheet-h={sheetDragHeight !== null ? `${sheetDragHeight}px` : null}
+	role="dialog"
+	aria-label="Route planning"
+>
+	{#if sheet}
+		<!-- Resize handle (narrow only): dragging grows the sheet up to
+		     the no-scroll height of the card list. Its own full-width
+		     row so the bar centers on the panel, not on the summary
+		     button beside the edit/close controls. -->
+		<div
+			class="rp-sheet-grab-row"
+			onpointerdown={grabDown}
+			onpointermove={grabMove}
+			aria-hidden="true"
+		>
+			<span class="rp-sheet-grab"></span>
+		</div>
+		<!-- Sheet header (narrow only, hidden by CSS on desktop): the
+		     from→to summary — a tap target that expands back to the
+		     full panel for editing — plus the edit pencil and close ×. -->
+		<div class="rp-sheet-head">
+			<button
+				class="rp-sheet-summary"
+				onclick={() => void expandSheet()}
+				aria-label="Edit the route"
+				title="Edit the route"
+			>
+				<span class="rp-sheet-eps">
+					<span class="rp-sheet-ep">
+						{routingState.from ? endpointLabel(routingState.from) : ''}
+					</span>
+					<span class="material-symbols-outlined rp-sheet-arrow" aria-hidden="true">chevron_right</span>
+					<span class="rp-sheet-ep">
+						{routingState.to ? endpointLabel(routingState.to) : ''}
+					</span>
+				</span>
+			</button>
+			<button
+				class="rp-sheet-edit icon-btn"
+				onclick={() => void expandSheet()}
+				aria-label="Edit the route"
+				title="Edit the route"
+			>
+				<span class="material-symbols-outlined" aria-hidden="true">edit</span>
+			</button>
+			<button
+				class="rp-close icon-btn"
+				onclick={() => routingState.closePanel()}
+				aria-label="Close route planning"
+			>×</button>
+		</div>
+	{/if}
 	<div class="rp-head">
 		<span class="rp-title">
 			<span class="material-symbols-outlined rp-title-icon" aria-hidden="true">directions</span>
@@ -600,25 +715,29 @@
 				mixedRanking={direct}
 			/>
 			{@render addStop(
-				!direct && routingState.from !== null && routingState.canAddVia,
+				routingState.from !== null && routingState.canAddVia,
 				() => addViaAt(0),
 				'Add a stop after the start'
 			)}
 		</div>
-		{#each direct ? [] : routingState.vias as v, i}
+		<!-- Via rows exist on every tab. Direct tabs: mixed search (points
+		     are valid vias there) and no wait control — omitting onWait is
+		     what suppresses it. -->
+		{#each routingState.vias as v, i}
 			<div class="rp-row">
 				<EndpointInput
 					bind:this={viaInputs[i]}
 					via
 					label="Via"
 					endpoint={v.station}
-					placeholder="Stop on the way"
+					placeholder={direct ? 'Place on the way' : 'Stop on the way'}
 					wait={v.wait}
 					onChange={(ep) => {
 						if (ep) routingState.setVia(i, ep);
 						else routingState.removeVia(i);
 					}}
-					onWait={(m) => routingState.setViaWait(i, m)}
+					onWait={direct ? undefined : (m) => routingState.setViaWait(i, m)}
+					mixedRanking={direct}
 				/>
 				{@render addStop(
 					v.station !== null && routingState.canAddVia,
@@ -639,7 +758,7 @@
 				mixedRanking={direct}
 			/>
 			{@render addStop(
-				!direct && canSplitDestination,
+				canSplitDestination,
 				splitDestination,
 				'Continue past the destination — it becomes a stop on the way'
 			)}
@@ -794,7 +913,12 @@
 					{/if}
 				{:else}
 					{#each routingState.directRoutes as r, i (i)}
-						<DirectRouteCard route={r} index={i} onFrameRoutes={onFrameDirectRoutes} />
+						<DirectRouteCard
+							route={r}
+							index={i}
+							onFrameRoutes={onFrameDirectRoutes}
+							onFrameRoute={onFrameDirectRoute}
+						/>
 					{/each}
 				{/if}
 			{:else if displayed.length === 0}
@@ -879,6 +1003,102 @@
 			max-height: 100dvh;
 			border-radius: 0;
 		}
+		/* Direct-mode bottom sheet (collapsed): the map owns the screen,
+		   the result cards dock at the bottom. MapChrome anchors the
+		   wrapper to the bottom edge (.top-controls.direct-sheet); here
+		   the panel drops its editing chrome, caps its height and rounds
+		   the top corners. The gradient hairline stays on the top edge. */
+		.routing-panel.sheet {
+			flex: 0 1 auto;
+			/* --sheet-h is the drag-resize override (see grabMove). */
+			max-height: var(--sheet-h, 46vh);
+			max-height: var(--sheet-h, 46dvh);
+			border-radius: 0.9rem 0.9rem 0 0;
+			box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.22);
+			padding-top: 0.3rem;
+			padding-bottom: calc(0.85rem + env(safe-area-inset-bottom, 0px));
+			gap: 0.45rem;
+		}
+		.routing-panel.sheet .rp-head,
+		.routing-panel.sheet .rp-travel,
+		.routing-panel.sheet .rp-endpoints,
+		.routing-panel.sheet .rp-direct-row,
+		.routing-panel.sheet .rp-results-sep {
+			display: none;
+		}
+		.routing-panel.sheet .rp-sheet-grab-row,
+		.routing-panel.sheet .rp-sheet-head {
+			display: flex;
+		}
+	}
+
+	/* Resize handle row — rendered only in sheet state, shown only on
+	   narrow viewports (rule above). touch-action: none keeps the drag
+	   from turning into a page scroll. */
+	.rp-sheet-grab-row {
+		display: none;
+		justify-content: center;
+		padding: 0.1rem 0 0.15rem;
+		margin: 0 -0.85rem;
+		touch-action: none;
+		cursor: grab;
+	}
+	.rp-sheet-grab {
+		width: 2.4rem;
+		height: 0.28rem;
+		border-radius: var(--radius-pill);
+		background: var(--gray-250);
+	}
+
+	/* Sheet header — rendered only in sheet state, but shown only on
+	   narrow viewports (the rule above); desktop keeps the side panel
+	   and never sees it. */
+	.rp-sheet-head {
+		display: none;
+		align-items: center;
+		gap: 0.35rem;
+	}
+	/* Base look + hover from .icon-btn (app.css); sizing only here. */
+	.rp-sheet-edit {
+		flex: 0 0 auto;
+		padding: 0.15rem 0.3rem;
+	}
+	.rp-sheet-edit :global(.material-symbols-outlined) {
+		font-size: 1.1rem;
+		line-height: 1;
+		display: block;
+	}
+	.rp-sheet-summary {
+		flex: 1 1 auto;
+		min-width: 0;
+		display: flex;
+		align-items: center;
+		border: none;
+		background: transparent;
+		font-family: inherit;
+		padding: 0.1rem 0;
+		cursor: pointer;
+		text-align: left;
+	}
+	.rp-sheet-eps {
+		display: flex;
+		align-items: center;
+		gap: 0.15rem;
+		min-width: 0;
+		font-size: 0.85rem;
+		font-weight: 600;
+		color: var(--gray-800);
+	}
+	.rp-sheet-ep {
+		min-width: 0;
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+	.rp-sheet-arrow {
+		flex: 0 0 auto;
+		font-size: 1rem;
+		color: var(--gray-400);
 	}
 
 	.rp-head {

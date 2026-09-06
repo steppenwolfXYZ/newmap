@@ -10,7 +10,7 @@ import maplibregl from 'maplibre-gl';
 import { isNarrow } from './layout';
 import { routingState } from './state.svelte';
 import { applyBasemapFocus, frameDirectBounds, restoreBasemapFocus } from './routeOverlay';
-import { makeGoalIconElement, makeStartIconElement } from './routeLayers';
+import { makeGoalIconElement, makeStartIconElement, makeViaIconElement } from './routeLayers';
 import type { DirectRoute } from './types';
 
 const DIRECT_SOURCE = 'direct-route';
@@ -36,10 +36,15 @@ const PUSHED_MUTED = '#666666';
 // they never read as part of the route.
 const CONN_COLOR = '#4d4d4d';
 const WALK_COLOR = '#1a1a1a';
-const WALK_MUTED = '#9a9a9a';
+const WALK_MUTED = '#6a6a6a';
 const CASING_COLOR = '#ffffff';
 
-let markers: { start: maplibregl.Marker; goal: maplibregl.Marker } | null = null;
+let markers: {
+	start: maplibregl.Marker;
+	goal: maplibregl.Marker;
+	/** One pin per requested via, in route order (direct-mode vias). */
+	vias: maplibregl.Marker[];
+} | null = null;
 let installedMode: 'bike' | 'walk' | null = null;
 let handlersInstalled = false;
 let lastRoutes: DirectRoute[] | null = null;
@@ -269,10 +274,49 @@ function addLayers(map: maplibregl.Map, mode: 'bike' | 'walk') {
 	}
 }
 
+/** Camera padding for direct-route framing. Narrow screens dock the
+ * result cards as a bottom sheet (max 46dvh — keep in sync with
+ * .routing-panel.sheet in RoutingPanel.svelte), so the bottom clearance
+ * covers it. With the sheet expanded to the full editing panel
+ * (content-height, top-anchored) the map only peeks out below it —
+ * frame into that measured strip, or return null when the strip is too
+ * small for a camera move to be worth anything. Desktop (undefined)
+ * keeps the shared left-panel padding. */
+const MIN_EXPANDED_STRIP_PX = 140;
+function directFramePadding(): maplibregl.PaddingOptions | null | undefined {
+	if (!isNarrow()) return undefined;
+	const panel = document.querySelector('.routing-panel');
+	const ph = panel ? Math.round(panel.getBoundingClientRect().height) : 0;
+	if (routingState.directSheetExpanded) {
+		if (window.innerHeight - ph < MIN_EXPANDED_STRIP_PX) return null;
+		return { top: ph + 16, bottom: 24, left: 40, right: 40 };
+	}
+	// Collapsed sheet: measured too — the drag handle can have grown it
+	// past the default 46dvh. The default is the floor (during a query
+	// the loading sheet is shorter than the results will be).
+	const bottom = Math.max(ph, Math.round(window.innerHeight * 0.46));
+	if (window.innerHeight - bottom < MIN_EXPANDED_STRIP_PX) return null;
+	return { top: 64, bottom: bottom + 24, left: 40, right: 40 };
+}
+
 /** Frame the union bbox of all shown alternatives — the direct-mode
- * analogue of frameItinerary (mobile map-mode entry / reframe). */
+ * analogue of frameItinerary (card map icon / sheet expand / desktop
+ * reframe). */
 export function frameDirectRoutes(getMap: () => maplibregl.Map | null) {
-	frameDirectBounds(getMap, unionBBox(routingState.directRoutes), 15);
+	const padding = directFramePadding();
+	if (padding === null) return;
+	frameDirectBounds(
+		getMap, unionBBox(routingState.directRoutes), 15, padding);
+}
+
+/** Frame the selected alternative's own bbox — a card click re-centers
+ * the route it picked (or re-picked). */
+export function frameSelectedDirectRoute(getMap: () => maplibregl.Map | null) {
+	const r = routingState.directRoutes[routingState.directSelected];
+	if (!r) return;
+	const padding = directFramePadding();
+	if (padding === null) return;
+	frameDirectBounds(getMap, [...r.bbox], 15, padding);
 }
 
 /** Install or update the overlay. Fresh route sets (a new query) apply
@@ -316,17 +360,38 @@ export function enterDirectRouteOverlay(
 			start: new maplibregl.Marker({ element: makeStartIconElement(), anchor: 'bottom' })
 				.setLngLat(start).addTo(map),
 			goal: new maplibregl.Marker({ element: makeGoalIconElement(), anchor: 'bottom' })
-				.setLngLat(goal).addTo(map)
+				.setLngLat(goal).addTo(map),
+			vias: []
 		};
 	} else {
 		markers.start.setLngLat(start);
 		markers.goal.setLngLat(goal);
 	}
+	// Via pins — same teardrop family as the transit route overlay's via
+	// markers. The count can change between queries, so surplus pins drop
+	// and missing ones are added; existing ones just move.
+	const vias = routes[0].requestedVias;
+	while (markers.vias.length > vias.length) markers.vias.pop()!.remove();
+	vias.forEach((coord, i) => {
+		if (markers!.vias[i]) markers!.vias[i].setLngLat(coord);
+		else {
+			markers!.vias.push(
+				new maplibregl.Marker({ element: makeViaIconElement(), anchor: 'bottom' })
+					.setLngLat(coord).addTo(map)
+			);
+		}
+	});
 
-	// Auto-frame on a fresh query only (desktop; narrow screens defer to
-	// the map-mode entry, same rule as the transit overlay).
-	if (fresh && !isNarrow()) {
-		frameDirectBounds(() => map, unionBBox(routes), 15);
+	// Auto-frame on a fresh query only. Narrow screens frame too — the
+	// bottom sheet leaves the map visible, so the new routes must land
+	// in the strip above it (padding accounts for the sheet; a fresh
+	// query always collapses it, so the null expanded case can't occur,
+	// but guard anyway).
+	if (fresh) {
+		const padding = directFramePadding();
+		if (padding !== null) {
+			frameDirectBounds(() => map, unionBBox(routes), 15, padding);
+		}
 	}
 }
 
@@ -337,6 +402,7 @@ export function exitDirectRouteOverlay(map: maplibregl.Map) {
 	if (markers) {
 		markers.start.remove();
 		markers.goal.remove();
+		for (const m of markers.vias) m.remove();
 		markers = null;
 	}
 	removeLayers(map);
@@ -365,6 +431,7 @@ export function directOverlayActive(): boolean {
 export function disposeDirectRouteOverlay() {
 	markers?.start.remove();
 	markers?.goal.remove();
+	for (const m of markers?.vias ?? []) m.remove();
 	markers = null;
 	installedMode = null;
 	handlersInstalled = false;

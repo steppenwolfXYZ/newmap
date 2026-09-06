@@ -52,8 +52,9 @@ function isValidViaList(v: unknown): v is FilledVia[] {
 	return v.every((e) => {
 		if (typeof e !== 'object' || e === null) return false;
 		const row = e as Record<string, unknown>;
-		const st = row.station as Record<string, unknown> | null;
-		if (!st || st.type !== 'station' || typeof st.uic !== 'string') return false;
+		// Stations and points — the ViaEndpoint set (point vias come from
+		// the direct tabs); isValidEndpoint already rejects 'current'.
+		if (!isValidEndpoint(row.station)) return false;
 		return typeof row.wait === 'number'
 			&& row.wait >= 0 && row.wait <= MAX_VIA_WAIT_MIN;
 	});
@@ -83,7 +84,8 @@ function writeStorage() {
  * (via-stops.md § Persistence and sharing) — two otherwise identical
  * routes through different stops are different routes. */
 function pairKey(from: Endpoint, to: Endpoint, vias?: FilledVia[]): string {
-	const mid = (vias ?? []).map((v) => `${v.station.uic}:${v.wait}`).join(',');
+	const mid = (vias ?? [])
+		.map((v) => `${endpointToParam(v.station)}:${v.wait}`).join(',');
 	return `${endpointToParam(from)}>${mid}>${endpointToParam(to)}`;
 }
 

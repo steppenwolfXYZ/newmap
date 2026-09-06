@@ -496,7 +496,7 @@ export function makeStartIconElement(): HTMLDivElement {
 // bar) inside — the stop the traveller chose to route through, drawn as a
 // sibling of the start / goal pins rather than as its own kind of marker.
 // Same pin shape and palette; the glyph is what distinguishes the three.
-function makeViaIconElement(): HTMLDivElement {
+export function makeViaIconElement(): HTMLDivElement {
 	const wrap = document.createElement('div');
 	wrap.className = 'route-via-icon';
 	wrap.style.cssText = [

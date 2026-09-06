@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { slide } from 'svelte/transition';
-	import type { FilledVia, Itinerary, Leg } from './types';
+	import type { FilledVia, Itinerary, Leg, StationEndpoint } from './types';
 	import { legBadgeColor, loadHfGondolaRoutes, loadRouteColorIndex } from './legColor';
 	import {
 		assessTransfers, legDuration, transferCount, usableSeconds, walkElevation, walkMetres,
@@ -213,10 +213,12 @@
 	// as a PASS-THROUGH, one of a transit leg's intermediate stops, which
 	// is what a 0-wait "route through here" via normally produces.
 	let queryVias = $derived(routingState.vias
-		.filter((v) => v.station !== null)
+		// Station filter is type-level only: transit vias (the only ones a
+		// ResultCard can see) are always stations.
+		.filter((v) => v.station !== null && v.station.type === 'station')
 		.map((v) => ({
-			id: stationPlaceId(v.station!),
-			name: v.station!.name,
+			id: stationPlaceId(v.station as StationEndpoint),
+			name: (v.station as StationEndpoint).name,
 			wait: v.wait
 		})));
 	let viaById = $derived(new Map(queryVias.map((v) => [v.id, v])));

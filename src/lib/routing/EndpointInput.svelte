@@ -55,9 +55,11 @@
 		 * plain match quality with no category boost. Station rows keep
 		 * their mode icon and styling either way. */
 		mixedRanking?: boolean;
-		/** Via row (via-stops.md): only stations are offered — the routing
-		 * engine takes stop ids for vias, never coordinates — the clear
-		 * control removes the whole row, and the wait control renders. */
+		/** Via row (via-stops.md): the clear control removes the whole row,
+		 * and the wait control renders when `onWait` is given. On the
+		 * transit tab only stations are offered (MOTIS takes stop ids for
+		 * vias, never coordinates); with `mixedRanking` (direct tabs) the
+		 * row searches the full mixed list — points are valid vias there. */
 		via?: boolean;
 		/** Requested minimum stay in minutes; via rows only. */
 		wait?: number;
@@ -142,8 +144,9 @@
 	// stale results and skip the network (matches the proxy's own gate).
 	$effect(() => {
 		const q = query.trim();
-		// Via rows are station-only, so the geocoder is never asked.
-		if (via || q.length < 2) {
+		// Transit via rows are station-only, so the geocoder is never
+		// asked there; direct via rows (mixedRanking) search like From/To.
+		if ((via && !mixedRanking) || q.length < 2) {
 			geoResults = [];
 			return;
 		}
@@ -273,8 +276,8 @@
 
 	const rows = $derived.by<Row[]>(() => {
 		const head: Row[] = showCurrent ? [{ kind: 'current' }] : [];
-		if (!mixedRanking || via) {
-			// Transit tab (and via rows): stations keep their dedicated
+		if (!mixedRanking) {
+			// Transit tab (via rows included): stations keep their dedicated
 			// area at the top, geocoder results follow below the divider.
 			return [
 				...head,
@@ -304,7 +307,7 @@
 	// Index at which the geo section starts (used for a divider above it).
 	// The mixed list interleaves the two sources, so it has no divider.
 	const geoStartIdx = $derived(
-		mixedRanking && !via ? -1 : (showCurrent ? 1 : 0) + stationResults.length
+		mixedRanking ? -1 : (showCurrent ? 1 : 0) + stationResults.length
 	);
 
 	function pickRow(row: Row) {
