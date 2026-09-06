@@ -144,7 +144,23 @@ function costingOptions(args: DirectRouteArgs): Record<string, unknown> {
 	// per-flight penalty (pedestrian-bicycle-routing.md § Pedestrian
 	// costing). The later wheelchair / stroller mode avoids them via its
 	// own costing options instead.
-	const pedestrian: Record<string, unknown> = { step_penalty: 0 };
+	//
+	// Ferries: walking is slow and ships are fast, so at the neutral
+	// default every slightly-viable ferry wins. use_ferry 0.17 prices a
+	// crossing at ~4 h of boarding cost plus ~7x on board (cost only —
+	// displayed times stay honest), so a ship wins only against a truly
+	// disproportionate walk; the per-crossing walk-around variants still
+	// appear when one does. use_rail_ferry 0 pins car-shuttle trains at
+	// the engine's maximum avoidance — walking through a rail tunnel
+	// aboard an Autoverlad is never a sensible pedestrian route. These
+	// options ride ONLY on the walking tab's queries: MOTIS's transit
+	// walk legs and the footpath matrix never see them, keeping the
+	// pedestrian costing byte-identical for the transit stack.
+	const pedestrian: Record<string, unknown> = {
+		step_penalty: 0,
+		use_ferry: 0.17,
+		use_rail_ferry: 0
+	};
 	// Match the transit tab's walking-speed tier so a direct walk and a
 	// transit walking leg of the same length agree on duration.
 	if (args.walkSpeedKmh != null) pedestrian.walking_speed = args.walkSpeedKmh;

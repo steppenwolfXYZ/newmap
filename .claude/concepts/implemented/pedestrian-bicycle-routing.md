@@ -105,7 +105,14 @@ penalty, cycle-route-relation signal, benchmark set) is specified in
 
 - Sensible defaults; stairs allowed and entirely unpenalized — a
   normal part of walking, no warning on the cards either. Avoiding them
-  belongs to the later wheelchair / stroller mode. (Step-free
+  belongs to the later wheelchair / stroller mode.
+- Ferries are strongly avoided on foot (roughly four hours of cost per
+  boarding plus a heavy on-board factor — walking is slow, so at
+  neutral pricing every slightly-viable ship would win), and
+  car-shuttle trains are avoided at the engine's maximum. Both via
+  request options on the walking tab's queries only — transit walk
+  legs and the footpath matrix stay untouched. The per-crossing
+  walk-around variants apply as on the cycling tab. (Step-free
   pedestrian routing is
   owned by `routing-options.md` § Step-free mode and is out of scope
   here.)
