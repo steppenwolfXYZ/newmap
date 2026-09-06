@@ -1149,11 +1149,11 @@
 		display: inline-flex;
 		align-items: center;
 		justify-content: center;
-		width: 1.5rem;
-		height: 1.5rem;
+		width: 1.7rem;
+		height: 1.7rem;
 		border-radius: var(--radius-pill);
-		background: var(--gradient-brand);
-		font-size: 1rem;
+		background: var(--brand);
+		font-size: 1.1rem;
 		line-height: 1;
 		color: var(--white);
 	}

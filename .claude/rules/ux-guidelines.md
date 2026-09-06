@@ -39,7 +39,6 @@ left-to-right fade):
 - Selected connection card: 4px gradient strip on the left edge,
   painted *below* the selection border (the border is an `::after`
   overlay ring so it stays above the strip and all content).
-- The routing panel's title icon: gradient circle, white glyph.
 
 **Brand red:**
 
@@ -49,6 +48,7 @@ left-to-right fade):
   button-styled links. **Not** for normal text-link hovers — too much.
 - Semantic accent (e.g. the "now" row in the time dropdown). No
   foreign accent colors (the old blue is gone).
+- The routing panel's title icon: red circle, white glyph.
 
 **Anthracite:**
 
