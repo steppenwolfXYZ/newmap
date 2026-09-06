@@ -29,6 +29,7 @@ import {
 	type LineDetailSelection
 } from '../linedetail/lineIndex';
 import { mapUi } from './uiState.svelte';
+import type { ViewMode } from './layers';
 
 let routeColorIndex: Map<string, string> | null = null;
 let routeStationIndex: Map<string, StationEntry> | null = null;
@@ -36,6 +37,14 @@ let routeStationIndex: Map<string, StationEntry> | null = null;
 // flight — mirrors lineDetailState.closingViaBack so the hashchange
 // listener skips the camera jump for that step.
 let closingRouteViaBack = false;
+
+// Snapshot of the user's view / contours choices from before a direct
+// cycling / walking tab forced its own basemap (standard view + contours
+// on) — restored when the direct tab is left. `false` while no forcing
+// is in effect.
+let directBasemapForced = false;
+let preDirectView: ViewMode = 'standard';
+let preDirectContours = false;
 
 /** Fed to createKoraMap so its hashchange listener knows when a
  * feature's history.back() close is consuming the hash step. */
@@ -176,6 +185,28 @@ export function setupMapOrchestration() {
 		if (!map || !map.isStyleLoaded()) return;
 		if (active) enterDirectRouteOverlay(map, routes, sel);
 		else exitDirectRouteOverlay(map);
+	});
+
+	// Direct cycling / walking tabs read the map as a base map: while
+	// one is active (panel open on bike / walk), force the standard
+	// view (place labels visible) and switch contours on. The user's
+	// prior choices are snapshotted on entry and restored on leaving;
+	// manual toggles while active stick until then. Transition-edged
+	// (the forced flag), so re-runs from the user's own toggles are
+	// no-ops rather than re-forcing.
+	$effect(() => {
+		const active = routingState.open && routingState.travelMode !== 'transit';
+		if (active && !directBasemapForced) {
+			directBasemapForced = true;
+			preDirectView = mapUi.viewMode;
+			preDirectContours = mapUi.contoursEnabled;
+			mapUi.setView('standard');
+			mapUi.setContours(true);
+		} else if (!active && directBasemapForced) {
+			directBasemapForced = false;
+			mapUi.setView(preDirectView);
+			mapUi.setContours(preDirectContours);
+		}
 	});
 
 	// Browser back / forward ↔ route selection. The pushed history entry

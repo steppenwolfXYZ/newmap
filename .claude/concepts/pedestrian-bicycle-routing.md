@@ -82,10 +82,10 @@ One card per route, analogous to the transit connection cards:
   direction of travel. On the map, pushed sections are drawn dotted —
   the walking-leg visual language; the cards do not call them out.
   Weighting details live in `bicycle-costing-fork.md`.
-- **Stairs:** short stubs cost only their carry time; long staircases
-  are heavily penalized, upward more than downward (length rule in
-  `bicycle-costing-fork.md`). An **avoid-stairs toggle** removes them
-  entirely. The toggle is **mandatory for V1** — stairs are an
+- **Stairs:** stairs under 2 m cost only their carry time; longer ones
+  add committing fees at 2 m and 4 m and a slow hauling pace, upward
+  far worse than downward (model in `bicycle-costing-fork.md`). An
+  **avoid-stairs toggle** removes them entirely. The toggle is **mandatory for V1** — stairs are an
   absolute no-go for e-bikes, which are increasingly the norm; bicycle
   routing does not ship without it.
 

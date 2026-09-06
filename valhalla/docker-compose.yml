@@ -70,8 +70,12 @@ services:
       # rebuild is a 10-30 min operation.
       - force_rebuild=False
       - force_rebuild_elevation=False
-      # SRTM 1-arcsec elevation for slope-aware pedestrian cost.
-      - build_elevation=True
+      # Elevation is pre-populated from Mapterhorn by setup_routing.sh
+      # step 3 (see mapterhorn-elevation-source.md) — the container must
+      # never fetch the AWS terrain tiles itself: that data is
+      # void-filled SRTM, off by hundreds of metres in gorges, and a
+      # container-side download would silently mix sources.
+      - build_elevation=False
       - build_admins=True
       # Admin polygons are enough; time zones are not needed for
       # pedestrian routing (Valhalla only uses them for transit).

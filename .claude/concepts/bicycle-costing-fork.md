@@ -113,12 +113,31 @@ Additional signals:
   cross traffic); roundabout circulation is exempt. Keeps zigzag mazes
   through quiet grids from tying with a straight corridor of equal
   length.
-- **Crossing penalty:** a transition where both roads are
-  through-traffic class costs extra; right turns are exempt, and so
-  are roundabouts — a Kreisel is the safe way across a big road, not a
-  crossing to avoid. For straight-ahead passage along a through road,
-  a traffic signal at the node may serve as the proxy for "a real
-  crossing of two big roads".
+- **Deviation penalty (cost only):** leaving a road that visibly goes
+  on adds navigation load even when the turn is gentle. The intuitive
+  continuation is found by road category and geometry, two stages: an
+  edge of the same class going roughly straight, else an edge within
+  one class going exactly straight. Deviating while a continuation
+  exists costs a few seconds of pure cost; none exists (T-junctions,
+  ends, unresolved forks) → free. Right of way proper is not in the
+  graph, and name continuity is actively wrong (side branches share
+  names; the natural flow changes name while the name turns and
+  yields — Mühlemattstrasse / Philosophenweg is the canonical case),
+  so category + geometry is the deliberate proxy.
+- **Crossing penalty:** a turning transition where both roads are
+  through-traffic class costs extra — but only at a real crossing
+  (four or more through-class arms at the junction), scaled by the
+  widest through arm's lane count: a small base for a single-lane
+  crossing, a strong step per additional lane — every further lane is
+  what makes a crossing genuinely hostile. Bus lanes do not count: the
+  OSM preprocessing subtracts bus/PSV lanes from the lane tags before
+  the tile build (a bus lane does not make a crossing harder). A T-junction is not a crossing: turning left into
+  a branching road pays only the ordinary turn cost (canonical:
+  Simmentalstrasse → Frutigenstrasse in Spiezwiler). Right turns are
+  exempt, and so are roundabouts — a Kreisel is the safe way across a
+  big road, not a crossing to avoid. For straight-ahead passage along
+  a through road, a traffic signal at the node may serve as the proxy
+  for "a real crossing of two big roads".
 - **Official bicycle routes** (OSM cycle-route relations) are
   slightly favored: membership gives an edge a small bonus in the
   same spirit as the *great* tier — enough to tip the balance between
@@ -177,11 +196,13 @@ Additional signals:
   next tile rebuild, and the cap stays as the fallback thereafter.
   Known interim cost: sustained alpine climbs on primary roads read a
   touch too fast.
-- **Stairs:** length-based, like pushing — a short stub (a few steps
-  between two lanes; the graph is full of them, and the mapped stairs
-  often sit beside an unmapped ramp) costs only its carry time, while
-  every metre beyond a small free length is heavily penalized, upward
-  more than downward, so a real staircase stays a last resort. A
+- **Stairs:** two honest components, mostly time. Hauling pace: a
+  per-metre time rate, uphill far worse than down. Committing fees at
+  length checkpoints: below 2 m a stair is trivial (lift the bike
+  over, nothing extra); from 2 m the carry must be figured out, from
+  4 m it is real hauling — each checkpoint fee counts once as time and
+  once more as cost, downward fees half the upward ones. A real
+  staircase stays a last resort through sheer honest slowness. A
   costing option excludes them entirely — this backs the V1-mandatory
   avoid-stairs toggle.
 - **Pushed-bike access** — a core requirement, not a follow-up: without

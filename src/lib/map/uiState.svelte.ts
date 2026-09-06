@@ -36,10 +36,12 @@ class MapUiState {
 		if (this.mapRef) applyViewMode(this.mapRef, mode);
 	};
 
-	toggleContours = () => {
-		this.contoursEnabled = !this.contoursEnabled;
-		if (this.mapRef) setContoursVisible(this.mapRef, this.contoursEnabled);
+	setContours = (enabled: boolean) => {
+		this.contoursEnabled = enabled;
+		if (this.mapRef) setContoursVisible(this.mapRef, enabled);
 	};
+
+	toggleContours = () => this.setContours(!this.contoursEnabled);
 
 	closeMenuOnSmallScreen = () => {
 		if (this.menuOpen && window.innerWidth <= MENU_AUTOCLOSE_MAX_WIDTH) this.menuOpen = false;

@@ -11,7 +11,8 @@
 #   1  Create docker network `koramaps`                 (instant; skipped if present)
 #   2  Build the MOTIS + Valhalla fork images           (~30-60 min compile each; skipped if
 #                                                        up to date with motis/fork, valhalla/fork)
-#   3  Patch OSM PBFs (foot=yes on alp/forest roads)    (~minutes each; skipped if up to date)
+#   3  Patch OSM PBFs + admin bounds + elevation        (~minutes each; skipped if up to date;
+#                                                        first elevation build downloads ~min)
 #   4  Start Valhalla (first run builds tiles)          (first run ~20-40 min, later instant)
 #   5  Preprocess GTFS for MOTIS (platform snap)        (~1 min; always runs, cheap)
 #   6  Build the Valhalla footpath matrix               (hours on a laptop; skipped when
@@ -23,6 +24,7 @@
 #
 #   --force-image     rebuild the MOTIS and Valhalla fork docker images
 #   --force-osm       re-patch both preprocessed OSM PBFs
+#   --force-elevation regenerate the Mapterhorn elevation cells
 #   --force-matrix    delete matrix CSV + checkpoint, recompute from scratch
 #   --force-import    re-run the MOTIS import
 #
@@ -46,6 +48,7 @@ cd "$(dirname "$0")/../.."
 
 FORCE_IMAGE=0
 FORCE_OSM=0
+FORCE_ELEVATION=0
 FORCE_MATRIX=0
 FORCE_IMPORT=0
 STEPS="1,2,3,4,5,6,7,8"
@@ -53,6 +56,7 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     --force-image)  FORCE_IMAGE=1 ;;
     --force-osm)    FORCE_OSM=1 ;;
+    --force-elevation) FORCE_ELEVATION=1 ;;
     --force-matrix) FORCE_MATRIX=1 ;;
     --force-import) FORCE_IMPORT=1 ;;
     --steps)        shift; STEPS="$1" ;;
@@ -61,7 +65,7 @@ while [[ $# -gt 0 ]]; do
       sed -n '2,31p' "$0"; exit 0 ;;
     *)
       echo "unknown arg: $1" >&2
-      echo "usage: $0 [--force-image] [--force-osm] [--force-matrix] [--force-import] [--steps LIST]" >&2
+      echo "usage: $0 [--force-image] [--force-osm] [--force-elevation] [--force-matrix] [--force-import] [--steps LIST]" >&2
       exit 2 ;;
   esac
   shift
@@ -238,6 +242,109 @@ else
   time python3 scripts/routing/preprocess_osm_for_motis.py --valhalla
 fi
 
+# Admin boundaries sidecar for Valhalla's admin DB. The routing input is
+# a bbox cut, which clips the neighbours' country boundary relations into
+# unclosed rings — valhalla_build_admins drops those, the admin DB covers
+# only CH+FL, and every node outside its polygons defaults to
+# drive-on-LEFT. That flips the bicycle costing's with-traffic turn
+# exemption abroad: legal right-hand roundabout exits price like 45 s
+# crossings while wrong-way counterflow pushes go free (canonical case:
+# the Domodossola SP166 roundabouts, pushed against circulation).
+# Fix: extract the complete level-2/4 administrative boundary relations
+# from the full country PBFs (osmium tags-filter pulls the member ways
+# and nodes along) and drop the merged sidecar into the container dir —
+# the scripted entrypoint feeds every *.pbf in /custom_files to
+# valhalla_build_admins. The parser keeps the FIRST copy of a way/node
+# it sees, and "admin_bounds" sorts before "ch_pfaedle_walkable", so the
+# complete geometry wins over any clipped remnant; the clipped admin
+# relations themselves are dropped from the walkable PBF by the
+# --valhalla preprocess so each admin polygon is built exactly once.
+# Two filter passes per country because tags-filter cannot AND two tags:
+# first by admin_level (small result), then by boundary=administrative.
+ADMIN_BOUNDS=data/osm/admin_bounds.osm.pbf
+PFAEDLE_IMAGE="${PFAEDLE_IMAGE:-carfree-pfaedle:latest}" # has osmium-tool
+admin_bounds_fresh() {
+  [[ $FORCE_OSM -eq 0 && -f $ADMIN_BOUNDS ]] || return 1
+  local f
+  for f in data/osm/*-latest.osm.pbf; do
+    [[ $ADMIN_BOUNDS -nt $f ]] || return 1
+  done
+  return 0
+}
+build_admin_bounds() {
+  local f cc lvl adm parts=()
+  if ! compgen -G "data/osm/*-latest.osm.pbf" >/dev/null; then
+    echo "no country PBFs in data/osm/ — run ./scripts/rebuild_transit.sh (step 02) first" >&2
+    return 1
+  fi
+  for f in data/osm/*-latest.osm.pbf; do
+    cc=$(basename "$f" | cut -d- -f1)
+    lvl=data/osm/_tmp_admin_lvl_$cc.osm.pbf
+    adm=data/osm/_tmp_admin_$cc.osm.pbf
+    docker run --rm -v "$PWD:/work" -w /work "$PFAEDLE_IMAGE" \
+      osmium tags-filter --overwrite -o "$lvl" "$f" r/admin_level=2 r/admin_level=4
+    docker run --rm -v "$PWD:/work" -w /work "$PFAEDLE_IMAGE" \
+      osmium tags-filter --overwrite -o "$adm" "$lvl" r/boundary=administrative
+    rm -f "$lvl"
+    parts+=("$adm")
+  done
+  docker run --rm -v "$PWD:/work" -w /work "$PFAEDLE_IMAGE" \
+    osmium merge --overwrite -o "$ADMIN_BOUNDS" "${parts[@]}"
+  rm -f "${parts[@]}"
+}
+if admin_bounds_fresh; then
+  echo "  admin_bounds.osm.pbf up to date — skipped"
+else
+  echo "  building admin_bounds.osm.pbf (complete country/state boundaries)"
+  time build_admin_bounds
+fi
+# Ship it to the container dir (container-owned, hence the docker cp) and
+# retire an admin DB older than it — the scripted entrypoint rebuilds the
+# DB only when the file is missing, and an admin rebuild forces the full
+# tile build that bakes the corrected drive-side into the graph.
+if [[ ! -f valhalla/data/admin_bounds.osm.pbf \
+      || $ADMIN_BOUNDS -nt valhalla/data/admin_bounds.osm.pbf ]]; then
+  docker run --rm -v "$PWD/data/osm:/src" -v "$PWD/valhalla/data:/d" alpine \
+    cp /src/admin_bounds.osm.pbf /d/admin_bounds.osm.pbf
+fi
+if [[ -f valhalla/data/admins.sqlite \
+      && valhalla/data/admin_bounds.osm.pbf -nt valhalla/data/admins.sqlite ]]; then
+  echo "  admins.sqlite predates admin_bounds.osm.pbf — removing so step 4 rebuilds it"
+  docker run --rm -v "$PWD/valhalla/data:/d" alpine rm -f /d/admins.sqlite
+fi
+
+# Elevation cells from Mapterhorn (mapterhorn-elevation-source.md). The
+# container no longer downloads AWS terrain tiles (build_elevation=False
+# in the compose) — those are void-filled SRTM, off by +200-450 m in
+# gorges (Gondo), which faked profiles, ascent totals, durations and
+# costing detours. The generator is a one-off: it runs when its output
+# is missing, when it changed itself, or on --force-elevation; routine
+# rebuilds never touch it. A regenerated set is synced into the
+# container dir wholesale (never mixed with leftover AWS cells) and the
+# tile-wipe below picks the new stamp up so step 4 rebuilds against it.
+ELEV_SRC=data/elevation/mapterhorn_hgt
+ELEV_STAMP=$ELEV_SRC/.mapterhorn_stamp
+ELEV_DST_STAMP=valhalla/data/elevation_data/.mapterhorn_stamp
+if [[ $FORCE_ELEVATION -eq 0 && -f $ELEV_STAMP \
+      && $ELEV_STAMP -nt scripts/routing/build_valhalla_elevation.py ]]; then
+  echo "  mapterhorn elevation cells up to date — skipped"
+else
+  time python3 scripts/routing/build_valhalla_elevation.py --force
+fi
+if [[ ! -f $ELEV_DST_STAMP || $ELEV_STAMP -nt $ELEV_DST_STAMP ]]; then
+  echo "  installing mapterhorn elevation into valhalla/data/elevation_data"
+  docker run --rm -v "$PWD/$ELEV_SRC:/src:ro" -v "$PWD/valhalla/data:/d" alpine \
+    sh -c 'rm -rf /d/elevation_data && mkdir -p /d/elevation_data && cp -r /src/. /d/elevation_data/'
+  # Tiles and matrix must describe the same surface: the wipe below
+  # rebuilds the tiles; the matrix is rebuilt every update_map cycle on
+  # the data machine, so locally only a warning is needed.
+  if [[ -f motis/data/valhalla_footpath_matrix.csv ]]; then
+    echo "  NOTE: footpath matrix predates the new elevation — it will be"
+    echo "  rebuilt in the next update_map cycle; for a local rebuild run"
+    echo "  step 6 with --force-matrix."
+  fi
+fi
+
 # Valhalla never notices a changed PBF: use_tiles_ignore_pbf=True means it
 # serves whatever tiles exist. So the staleness check belongs here, right
 # after the input is rewritten — deciding it earlier (as update_map.sh used
@@ -279,9 +386,15 @@ tiles_version_stale() {
   [[ "$(cat "$TILES_VERSION_STAMP")" != "$VALHALLA_PIN" ]]
 }
 if [[ -f "$TILES_TAR" ]] \
-   && { [[ data/osm/ch_pfaedle_walkable.osm.pbf -nt "$TILES_TAR" ]] || tiles_version_stale; }; then
+   && { [[ data/osm/ch_pfaedle_walkable.osm.pbf -nt "$TILES_TAR" ]] || tiles_version_stale \
+        || [[ ! -f valhalla/data/admins.sqlite ]] \
+        || [[ "$ELEV_DST_STAMP" -nt "$TILES_TAR" ]]; }; then
   if tiles_version_stale; then
     echo "  Valhalla tiles were built with $(cat "$TILES_VERSION_STAMP"), pin is $VALHALLA_PIN — wiping so step 4 rebuilds"
+  elif [[ ! -f valhalla/data/admins.sqlite ]]; then
+    echo "  admin DB pending rebuild — wiping tiles so step 4 bakes the fresh admin data in"
+  elif [[ "$ELEV_DST_STAMP" -nt "$TILES_TAR" ]]; then
+    echo "  elevation set is newer than the tiles — wiping so step 4 rebuilds against it"
   else
     echo "  Valhalla tiles are older than their inputs — wiping so step 4 rebuilds"
   fi
@@ -304,9 +417,17 @@ if want 4; then
 # ── Step 4: Valhalla ────────────────────────────────────────────────
 echo ""
 echo "▶ Step 4 — Start Valhalla"
+# The container no longer fetches elevation itself (build_elevation=False):
+# a tile build against an empty elevation dir would silently produce
+# grade-less tiles, so refuse to start one.
+if [[ ! -f valhalla/data/valhalla_tiles.tar ]] \
+   && ! ls valhalla/data/elevation_data/*/*.hgt >/dev/null 2>&1; then
+  echo "no elevation cells in valhalla/data/elevation_data — run step 3 first" >&2
+  exit 1
+fi
 if [[ ! -f valhalla/data/valhalla_tiles.tar ]]; then
-  echo "  no tiles yet — first run downloads SRTM elevation and builds"
-  echo "  tiles (~20-40 min). Follow along: docker logs -f kora-valhalla"
+  echo "  no tiles yet — first run builds admins + tiles (~20-40 min)."
+  echo "  Follow along: docker logs -f kora-valhalla"
 fi
 (cd valhalla && docker compose up -d valhalla)
 printf "  waiting for Valhalla on :8002 "

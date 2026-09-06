@@ -169,22 +169,28 @@ constexpr float kHillStrength = 1.0f;
 constexpr uint32_t kThroughGradeCapIndex = 10; // bucket 10 = 6.5 %
 
 // ── Stairs ──────────────────────────────────────────────────────────────
-// Length-based, like the push rule: a short stair stub (a few steps
-// between two lanes — Bern is full of them) costs only its carry time,
-// while every metre beyond the free length accrues a heavy per-metre
-// penalty, uphill more than downhill — a real staircase stays a last
-// resort. The old flat factor priced a 4 m stub at ~2 minutes of cost,
-// which excluded whole sensible corridors (canonical: the Spiezwiler
-// lane whose 3-step stub outweighed a 100 m walkway push). The free
-// length is per edge; steps are rarely fragmented, and the push-section
-// rebate explicitly excludes them so nothing double-frees.
+// Two honest components, both mostly TIME so displayed durations stay
+// truthful:
+//   1. Hauling pace: carrying a bike over steps is slow — a per-metre
+//      time rate, uphill far worse than down.
+//   2. Committing fees at length checkpoints: below 2 m a stair is
+//      trivial (lift the bike over, no fee); from 2 m the carry has to
+//      be figured out (fee one), from 4 m it is real hauling (fee two).
+//      Each fee counts once as time and once more as cost-only penalty;
+//      downward fees are half the upward ones.
+// Fees are per edge: back-to-back fragments of a real staircase each
+// ≥ 2 m still sum to about the right total, and steps ways are rarely
+// fragmented — a sub-2 m fragment of a longer flight dodging its fee is
+// the accepted imprecision (stateless costing cannot track sections).
 // Direction comes from the edge's weighted grade (index 6 = flat); a
-// staircase the elevation model cannot resolve counts as the mean.
-constexpr float kStepsSpeedUpKph = 1.5f;
-constexpr float kStepsSpeedDownKph = 2.5f;
-constexpr float kStairsFreeMeters = 5.0f;
-constexpr float kStairsPenaltyUpSecPerM = 20.0f;
-constexpr float kStairsPenaltyDownSecPerM = 8.0f;
+// staircase the elevation model cannot resolve — most stubs — counts as
+// the mean of up and down.
+constexpr float kStairsSecPerMUp = 13.0f;
+constexpr float kStairsSecPerMDown = 7.0f;
+constexpr float kStairsFeeThreshold1M = 2.0f;
+constexpr float kStairsFeeThreshold2M = 4.0f;
+constexpr float kStairsFeeUpSec = 20.0f;   // per checkpoint: as time AND as cost
+constexpr float kStairsFeeDownSec = 10.0f; // per checkpoint: as time AND as cost
 constexpr uint32_t kFlatGradeIndex = 6;
 
 // ── Pushed bike ─────────────────────────────────────────────────────────
@@ -201,6 +207,34 @@ constexpr uint32_t kFlatGradeIndex = 6;
 // was pushed — so a section chopped into short edges collects a little
 // extra slack; calibrate kPushPenaltySecPerM with that in mind.
 constexpr float kPushSpeedKph = 4.5f;
+// Pushing uphill is slower AND deserves extra discouragement — shoving
+// a bike up a slope is the worst part of any route. The speed factor
+// scales the pushing pace by the edge grade (walking slows less than
+// riding, so this is gentler than the everyday curve; downhill pushing
+// stays near flat pace — braking a pushed bike is easy). On top, every
+// pushed metre at a climbing grade (≥ ~3 %) pays the uphill surcharge.
+// Caveat: edges shorter than the ~30 m elevation raster read as flat,
+// so tiny stubs escape both — the fixed costs are what prices those.
+constexpr float kPushGradeSpeedFactor[] = {
+    1.00f, // -10%
+    1.00f, // -8%
+    1.00f, // -6.5%
+    1.00f, // -5%
+    1.00f, // -3%
+    1.00f, // -1.5%
+    1.00f, // 0%
+    0.90f, // 1.5%
+    0.80f, // 3%
+    0.70f, // 5%
+    0.62f, // 6.5%
+    0.55f, // 8%
+    0.50f, // 10%
+    0.45f, // 11.5%
+    0.42f, // 13%
+    0.40f  // 15%
+};
+constexpr uint32_t kPushUphillGradeIndex = 8; // bucket 8 = 3%
+constexpr float kPushUphillExtraSecPerM = 0.6f;
 // The allowance is per push SECTION (contiguous pushed edges,
 // uninterrupted by riding), not per edge: EdgeCost charges the penalty
 // on every pushed metre, and the transition into the section's first
@@ -213,9 +247,11 @@ constexpr float kPushSpeedKph = 4.5f;
 // relaxations); a section whose first fragment is shorter than the
 // allowance loses the remainder — a few seconds, acceptable.
 constexpr float kPushFreeMeters = 20.0f;
-// Sized so penalized pushing costs like moving at ~3 km/h on the flat:
-// time at 4.5 km/h is 0.8 s/m, the penalty adds 0.4 s/m → 1.2 s-cost/m.
-constexpr float kPushPenaltySecPerM = 0.4f;
+// Sized so a long push effectively prices near 2.5 km/h on the flat
+// (time at 4.5 km/h is 0.8 s/m, the penalty adds 0.6). Together with the
+// turn and deviation penalties this outprices the 100 m Sportplatz
+// walkway cut at Spiezwiler against the normal road.
+constexpr float kPushPenaltySecPerM = 0.6f;
 
 // ── Ferries & car shuttles ──────────────────────────────────────────────
 // Water ferries and rail ferries (car-shuttle trains — Lötschberg,
@@ -259,13 +295,37 @@ constexpr float kTurnSecByType[] = {
     2.0f   // slight left
 };
 
+// ── Deviation from the intuitive continuation ───────────────────────────
+// Cost-only (no time): leaving a road that visibly goes on adds
+// navigation load even when the turn itself is gentle. The intuitive
+// continuation is found by road category and geometry, two stages: any
+// edge of the SAME class as the road we are on going roughly straight
+// (straight or slight); failing that, any edge within one class going
+// exactly straight. Take something else while such a continuation
+// exists → the penalty. No candidate (T-junctions, road ends, forks
+// resolved by neither stage) → no penalty; roundabouts exempt; a
+// continuation we cannot legally use (oneway against us) does not
+// count — our turn is then the forced choice, not a deviation.
+constexpr float kDeviationPenaltySec = 3.0f;
+
 // ── Crossings (cost seconds added at the transition) ────────────────────
 // Applied when BOTH the road being left and the road being entered are
-// through-traffic class. Right turns (with-traffic side) are exempt, and
-// so are roundabouts — a Kreisel is the safe way across a big road, not
-// a crossing to avoid (keyed on the entered edge's roundabout flag; the
-// exit is a right turn and exempt anyway).
-constexpr float kCrossingTurnPenalty = 45.0f;           // left / sharp left / reverse
+// through-traffic class AND the junction is a real crossing: at least
+// four through-class arms. A T-junction (three arms) pays only the
+// ordinary turn cost — turning left into a branching road is not a
+// crossing (canonical: Simmentalstrasse → Frutigenstrasse in
+// Spiezwiler). The penalty scales with the widest through arm: a small
+// base for a single-lane crossing plus a strong step per additional
+// lane in one direction — crossing a one-lane road is routine, every
+// further lane is what makes a crossing genuinely hostile. (Lane counts
+// come from the tiles; the OSM preprocessing subtracts bus lanes before
+// the tile build, since a bus lane does not make a crossing harder —
+// until the next tile rebuild bus lanes still count.) Right turns
+// (with-traffic side) are exempt, and so are roundabouts — a Kreisel is
+// the safe way across a big road, not a crossing to avoid. A junction
+// the costing cannot inspect (tile boundary) charges nothing.
+constexpr float kCrossingTurnBaseSec = 8.0f;
+constexpr float kCrossingTurnPerLaneSec = 12.0f;
 constexpr float kCrossingStraightSignalPenalty = 30.0f; // straight on, across a signal
 // Entering a genuinely fast bare road (≥ this speed, no bike
 // infrastructure) from a quiet street: a small nudge on top of the
@@ -516,13 +576,112 @@ inline bool is_straight_on(Turn::Type t, bool drive_on_right) {
          (drive_on_right ? t == Turn::Type::kSlightLeft : t == Turn::Type::kSlightRight);
 }
 
+// kora fork: is the taken edge a deviation from the intuitive
+// continuation? (See kDeviationPenaltySec.) `idx` is the opposing
+// predecessor's local index at the node — the key the per-pair turn
+// types are stored under; `pred_class` the class of the road arrived
+// on; `taken` the edge entered.
+inline bool is_deviation(const graph_tile_ptr& tile,
+                         const NodeInfo* node,
+                         const uint32_t idx,
+                         const baldr::RoadClass pred_class,
+                         const DirectedEdge* taken) {
+  if (tile == nullptr || taken->roundabout()) {
+    return false;
+  }
+  // The node's edges are only readable when this tile really owns the
+  // node — at tile boundaries and hierarchy transitions the tile handed
+  // to the costing can be another one, and indexing into it runs out of
+  // bounds (found the hard way: 500s at exactly those junctions). Guard
+  // by bounds AND by the taken edge lying inside the node's edge range;
+  // when either fails, we cannot see the junction — no penalty.
+  const uint32_t ei = node->edge_index();
+  const uint32_t ec = node->edge_count();
+  if (ei + ec > tile->header()->directededgecount()) {
+    return false;
+  }
+  const DirectedEdge* first = tile->directededge(ei);
+  if (taken < first || taken >= first + ec) {
+    return false;
+  }
+  bool a_other = false, a_taken = false; // same class, roughly straight
+  bool b_other = false, b_taken = false; // class ±1, exactly straight
+  const DirectedEdge* e = first;
+  for (uint32_t i = 0; i < ec; ++i, ++e) {
+    if (e->is_shortcut() ||
+        !(e->forwardaccess() & (kBicycleAccess | kPedestrianAccess))) {
+      continue;
+    }
+    const Turn::Type tt = e->turntype(idx);
+    const int dc = static_cast<int>(e->classification()) - static_cast<int>(pred_class);
+    const bool rough =
+        tt == Turn::Type::kStraight || tt == Turn::Type::kSlightRight || tt == Turn::Type::kSlightLeft;
+    if (dc == 0 && rough) {
+      (e == taken ? a_taken : a_other) = true;
+    }
+    if (dc >= -1 && dc <= 1 && tt == Turn::Type::kStraight) {
+      (e == taken ? b_taken : b_other) = true;
+    }
+  }
+  // Stage A decides when it has any candidate; stage B only otherwise.
+  if (a_other || a_taken) {
+    return !a_taken;
+  }
+  if (b_other || b_taken) {
+    return !b_taken;
+  }
+  return false;
+}
+
+// kora fork: junction shape for the crossing rule — how many
+// through-class arms meet at this node, and whether any of them is
+// multi-lane. Same ownership guards as is_deviation: when the node's
+// edges are not readable from this tile, `valid` stays false and the
+// crossing rule charges nothing.
+struct JunctionArms {
+  bool valid = false;
+  uint32_t through_arms = 0;
+  uint32_t max_lanes = 1; // widest through arm, lanes in its direction
+};
+
+inline JunctionArms junction_arms(const graph_tile_ptr& tile,
+                                  const NodeInfo* node,
+                                  const DirectedEdge* taken) {
+  JunctionArms j;
+  if (tile == nullptr) {
+    return j;
+  }
+  const uint32_t ei = node->edge_index();
+  const uint32_t ec = node->edge_count();
+  if (ei + ec > tile->header()->directededgecount()) {
+    return j;
+  }
+  const DirectedEdge* first = tile->directededge(ei);
+  if (taken < first || taken >= first + ec) {
+    return j;
+  }
+  j.valid = true;
+  const DirectedEdge* e = first;
+  for (uint32_t i = 0; i < ec; ++i, ++e) {
+    if (e->is_shortcut()) {
+      continue;
+    }
+    if (is_through(e->classification(), e->use())) {
+      ++j.through_arms;
+      j.max_lanes = std::max(j.max_lanes, e->lanecount());
+    }
+  }
+  return j;
+}
+
 // The crossing rule, shared by both transition directions.
 // from_rc / from_use describe the edge being left, `to` the edge entered.
 inline float crossing_penalty(baldr::RoadClass from_rc,
                               Use from_use,
                               const DirectedEdge* to,
                               const NodeInfo* node,
-                              Turn::Type turn) {
+                              Turn::Type turn,
+                              const graph_tile_ptr& tile) {
   float penalty = 0.0f;
   // Roundabouts are the safe way across a big road — never a crossing to
   // penalize (entering / circulating; the exit is an exempt right turn).
@@ -538,7 +697,14 @@ inline float crossing_penalty(baldr::RoadClass from_rc,
         penalty += kora::kCrossingStraightSignalPenalty;
       }
     } else {
-      penalty += kora::kCrossingTurnPenalty;
+      // Turning across: only at a real crossing (4+ through arms);
+      // base rate plus a step per lane beyond the first on the widest
+      // through arm.
+      const JunctionArms j = junction_arms(tile, node, to);
+      if (j.valid && j.through_arms >= 4) {
+        penalty += kora::kCrossingTurnBaseSec +
+                   kora::kCrossingTurnPerLaneSec * static_cast<float>(j.max_lanes - 1);
+      }
     }
   }
   if (!from_through && classify(to) == Tier::kBad && !to->use_sidepath() &&
@@ -930,24 +1096,32 @@ Cost BicycleCost::EdgeCost(const baldr::DirectedEdge* edge,
                            const graph_tile_ptr&,
                            const baldr::TimeInfo&,
                            uint8_t&) const {
-  // kora fork: stairs — carry time, free for a short stub, per-metre
-  // penalized beyond (uphill worse). See the kora block for sizing.
+  // kora fork: stairs — hauling time plus committing fees at the length
+  // checkpoints. See the kora block for the model.
   if (edge->use() == Use::kSteps) {
     const uint32_t wg = edge->weighted_grade();
-    float kph, per_m;
+    float per_m, fee;
     if (wg > kora::kFlatGradeIndex) {
-      kph = kora::kStepsSpeedUpKph;
-      per_m = kora::kStairsPenaltyUpSecPerM;
+      per_m = kora::kStairsSecPerMUp;
+      fee = kora::kStairsFeeUpSec;
     } else if (wg < kora::kFlatGradeIndex) {
-      kph = kora::kStepsSpeedDownKph;
-      per_m = kora::kStairsPenaltyDownSecPerM;
+      per_m = kora::kStairsSecPerMDown;
+      fee = kora::kStairsFeeDownSec;
     } else {
-      kph = 0.5f * (kora::kStepsSpeedUpKph + kora::kStepsSpeedDownKph);
-      per_m = 0.5f * (kora::kStairsPenaltyUpSecPerM + kora::kStairsPenaltyDownSecPerM);
+      per_m = 0.5f * (kora::kStairsSecPerMUp + kora::kStairsSecPerMDown);
+      fee = 0.5f * (kora::kStairsFeeUpSec + kora::kStairsFeeDownSec);
     }
-    const float sec = edge->length() * 3.6f / kph;
-    const float over = std::max(0.0f, static_cast<float>(edge->length()) - kora::kStairsFreeMeters);
-    return {shortest_ ? edge->length() : sec + over * per_m, sec};
+    const float len = edge->length();
+    float fees = 0.0f;
+    if (len >= kora::kStairsFeeThreshold1M) {
+      fees += fee;
+    }
+    if (len >= kora::kStairsFeeThreshold2M) {
+      fees += fee;
+    }
+    const float sec = len * per_m + fees; // fees count once as time…
+    const float cost = sec + fees;        // …and once more as cost
+    return {shortest_ ? len : cost, sec};
   }
 
   // kora fork: ferries AND rail ferries (car shuttles) use the ferry
@@ -962,14 +1136,19 @@ Cost BicycleCost::EdgeCost(const baldr::DirectedEdge* edge,
 
   // kora fork: pushed bike — walking pace on edges we may not (or, for
   // bicycle=dismount tagging, must not) ride. The tier model does not
-  // apply on foot: honest pushing time plus the per-metre penalty on
-  // every metre — the section's free allowance is granted back at its
-  // entry transition (see kPushFreeMeters).
+  // apply on foot: grade-scaled pushing time plus the per-metre penalty
+  // on every metre (uphill pays the extra surcharge) — the section's
+  // free allowance is granted back at its entry transition
+  // (see kPushFreeMeters).
   if (is_pushed(edge) || edge->dismount()) {
-    const float sec = edge->length() * 3.6f / kora::kPushSpeedKph;
-    return {shortest_ ? edge->length()
-                      : sec + edge->length() * kora::kPushPenaltySecPerM,
-            sec};
+    const uint32_t pg = effective_grade(edge);
+    const float sec =
+        edge->length() * 3.6f / (kora::kPushSpeedKph * kora::kPushGradeSpeedFactor[pg]);
+    float per_m = kora::kPushPenaltySecPerM;
+    if (pg >= kora::kPushUphillGradeIndex) {
+      per_m += kora::kPushUphillExtraSecPerM;
+    }
+    return {shortest_ ? edge->length() : sec + edge->length() * per_m, sec};
   }
 
   // kora fork: tier factor + official-route bonus + hills + surface.
@@ -1009,7 +1188,7 @@ Cost BicycleCost::EdgeCost(const baldr::DirectedEdge* edge,
 Cost BicycleCost::TransitionCost(const baldr::DirectedEdge* edge,
                                  const baldr::NodeInfo* node,
                                  const EdgeLabel& pred,
-                                 const graph_tile_ptr& /*tile*/,
+                                 const graph_tile_ptr& tile,
                                  const std::function<LimitedGraphReader()>& /*reader_getter*/) const {
   // Get the transition cost for country crossing, ferry, gate, toll booth,
   // destination only, alley, maneuver penalty
@@ -1044,7 +1223,12 @@ Cost BicycleCost::TransitionCost(const baldr::DirectedEdge* edge,
   }
 
   // kora fork: the crossing rule.
-  const float penalty = crossing_penalty(pred.classification(), pred.use(), edge, node, turn);
+  float penalty = crossing_penalty(pred.classification(), pred.use(), edge, node, turn, tile);
+
+  // kora fork: deviation from the intuitive continuation (cost only).
+  if (is_deviation(tile, node, idx, pred.classification(), edge)) {
+    penalty += kora::kDeviationPenaltySec;
+  }
 
   // kora fork: expected wait when boarding a ferry / car shuttle. Real
   // time, so it reaches the displayed duration too.
@@ -1078,7 +1262,7 @@ Cost BicycleCost::TransitionCostReverse(const uint32_t idx,
                                         const baldr::NodeInfo* node,
                                         const baldr::DirectedEdge* pred,
                                         const baldr::DirectedEdge* edge,
-                                        const graph_tile_ptr& /*tile*/,
+                                        const graph_tile_ptr& tile,
                                         const GraphId& /*pred_id*/,
                                         const std::function<LimitedGraphReader()>& /*reader_getter*/,
                                         const bool /*has_measured_speed*/,
@@ -1117,7 +1301,12 @@ Cost BicycleCost::TransitionCostReverse(const uint32_t idx,
   }
 
   // kora fork: the crossing rule (pred is the edge being left here too).
-  const float penalty = crossing_penalty(pred->classification(), pred->use(), edge, node, turn);
+  float penalty = crossing_penalty(pred->classification(), pred->use(), edge, node, turn, tile);
+
+  // kora fork: deviation from the intuitive continuation (cost only).
+  if (is_deviation(tile, node, idx, pred->classification(), edge)) {
+    penalty += kora::kDeviationPenaltySec;
+  }
 
   // kora fork: ferry / car-shuttle boarding wait, as in TransitionCost.
   if ((edge->use() == Use::kFerry || edge->use() == Use::kRailFerry) &&

@@ -11,7 +11,12 @@ This step adds `foot=yes` to any way tagged `access=agricultural` or
 `access=forestry` that doesn't already carry a `foot=*` override, so the
 per-profile access_override picks it up as a foot-whitelist.
 
-For the Valhalla output it additionally tags under-passing highways
+For the Valhalla output it additionally subtracts bus/PSV lanes from
+the `lanes` tags (`lanes`, `lanes:forward`, `lanes:backward`) — Valhalla
+bakes only the plain lane count into its tiles, the bicycle costing
+scales its crossing penalty per lane of the road being crossed, and a
+bus lane does not make a crossing harder (bicycle-costing-fork.md
+§ crossing penalty) — and tags under-passing highways
 (`layer<0` or `cutting=*`, no tunnel) as `tunnel=yes`. Valhalla samples elevation from
 a ~30 m DEM, which sees the structure a road passes UNDER — underpasses
 come out as fake 10-15 % climbs (canonical case: Schwarzenburgstrasse
@@ -28,6 +33,15 @@ routing-graph fiction that never reaches the map or MOTIS; its only
 other Valhalla effect is the (unused) exclude_tunnels request option.
 See bicycle-costing-fork.md § grade cap for the query-time fallback that
 guards the same artifact until tiles are rebuilt.
+
+The Valhalla output also DROPS level-2/4 administrative boundary
+relations: the bbox cut has clipped them into unclosed rings that
+valhalla_build_admins cannot polygonize (which left the admin DB
+covering only CH+FL, and everything abroad defaulted to drive-on-left —
+flipping the bicycle costing's with-traffic turn exemption). The
+complete relations reach the container via the `admin_bounds.osm.pbf`
+sidecar built by setup_routing.sh step 3; dropping the clipped copies
+here keeps each admin polygon from being built twice.
 
 With `--overlay` it also merges the synthetic station walk network
 (`build_station_walk_network.py`) into the output: platform walk lines,
@@ -105,8 +119,62 @@ def _underpass_fix(tags: dict) -> bool:
         return False
 
 
+def _is_admin_boundary(tags) -> bool:
+    """Level-2/4 administrative boundary relation — the kind Valhalla's
+    admin DB is built from. The bbox cut clips these into unclosed rings
+    (members outside the bbox are gone), so the Valhalla output drops
+    them entirely: the complete relations arrive via the
+    `admin_bounds.osm.pbf` sidecar that setup_routing.sh step 3 extracts
+    from the full country PBFs, and keeping the clipped copies here
+    would make valhalla_build_admins build every admin polygon twice
+    (its relation list is a plain vector, no dedup)."""
+    return (tags.get("boundary") == "administrative"
+            and tags.get("admin_level") in ("2", "4"))
+
+
+def _int_tag(tags: dict, key: str) -> int:
+    try:
+        return int(tags.get(key, "0"))
+    except ValueError:
+        return 0
+
+
+def _bus_lane_fix(tags: dict) -> list[tuple[str, str]] | None:
+    """Rewritten lane tags with bus/PSV lanes subtracted, or None when
+    nothing changes. Each directional count is guarded to stay ≥ 1 (a
+    way whose only lane is the bus lane still has one physical lane to
+    cross); the total is recomputed from the parts when both directions
+    are tagged, else reduced directly."""
+    if "highway" not in tags or "lanes" not in tags:
+        return None
+    bus_total = sum(_int_tag(tags, k) for k in ("lanes:bus", "lanes:psv"))
+    bus_fwd = sum(_int_tag(tags, k) for k in ("lanes:bus:forward", "lanes:psv:forward"))
+    bus_bwd = sum(_int_tag(tags, k) for k in ("lanes:bus:backward", "lanes:psv:backward"))
+    if bus_total + bus_fwd + bus_bwd == 0:
+        return None
+    lanes = _int_tag(tags, "lanes")
+    if lanes <= 0:
+        return None
+    out: list[tuple[str, str]] = []
+    fwd = _int_tag(tags, "lanes:forward")
+    bwd = _int_tag(tags, "lanes:backward")
+    if fwd > 0:
+        fwd = max(1, fwd - bus_fwd - bus_total)
+        out.append(("lanes:forward", str(fwd)))
+    if bwd > 0:
+        bwd = max(1, bwd - bus_bwd - bus_total)
+        out.append(("lanes:backward", str(bwd)))
+    if fwd > 0 and bwd > 0:
+        new_lanes = fwd + bwd
+    else:
+        new_lanes = max(1, lanes - bus_total - bus_fwd - bus_bwd)
+    out.append(("lanes", str(new_lanes)))
+    return out
+
+
 def patch(in_path: Path, out_path: Path, overlay: Path | None = None,
-          underpass_elevation_fix: bool = False) -> None:
+          underpass_elevation_fix: bool = False,
+          drop_admin_relations: bool = False) -> None:
     if not in_path.exists():
         raise SystemExit(f"input PBF not found: {in_path}")
 
@@ -121,7 +189,7 @@ def patch(in_path: Path, out_path: Path, overlay: Path | None = None,
     # Synthetic ids sit far above every live OSM id, so appending each
     # synthetic block after the corresponding real block keeps the output
     # sorted by (type, id) the way every osmium consumer expects.
-    n_ways = n_patched = n_underpass = 0
+    n_ways = n_patched = n_underpass = n_buslanes = n_admin_dropped = 0
     wrote_nodes = wrote_ways = False
     with osmium.SimpleWriter(str(out_path), overwrite=True) as writer:
         def flush_nodes():
@@ -157,15 +225,23 @@ def patch(in_path: Path, out_path: Path, overlay: Path | None = None,
                 if underpass_elevation_fix and _underpass_fix(tags):
                     extra.append(("tunnel", "yes"))
                     n_underpass += 1
+                if underpass_elevation_fix:
+                    lane_fix = _bus_lane_fix(tags)
+                    if lane_fix:
+                        extra.extend(lane_fix)
+                        n_buslanes += 1
                 if extra:
-                    new_tags = [(k, v) for k, v in obj.tags
-                                if not (k == "tunnel" and ("tunnel", "yes") in extra)]
+                    replaced = {k for k, _ in extra}
+                    new_tags = [(k, v) for k, v in obj.tags if k not in replaced]
                     writer.add_way(obj.replace(tags=new_tags + extra))
                 else:
                     writer.add_way(obj)
             elif obj.is_relation():
                 flush_nodes()
                 flush_ways()
+                if drop_admin_relations and _is_admin_boundary(obj.tags):
+                    n_admin_dropped += 1
+                    continue
                 writer.add_relation(obj)
         flush_nodes()
         flush_ways()
@@ -173,6 +249,9 @@ def patch(in_path: Path, out_path: Path, overlay: Path | None = None,
     print(f"ways: {n_ways:,}  patched (added foot=yes): {n_patched:,}")
     if underpass_elevation_fix:
         print(f"underpasses marked tunnel=yes for elevation: {n_underpass:,}")
+        print(f"ways with bus/PSV lanes subtracted: {n_buslanes:,}")
+    if drop_admin_relations:
+        print(f"clipped admin boundary relations dropped: {n_admin_dropped:,}")
     if overlay is not None:
         print(f"overlay merged: {len(ov_nodes):,} nodes, {len(ov_ways):,} ways")
     print(f"→ {out_path}")
@@ -203,13 +282,15 @@ def main() -> None:
 
     if args.input and args.output:
         patch(args.input, args.output, overlay,
-              underpass_elevation_fix=args.valhalla)
+              underpass_elevation_fix=args.valhalla,
+              drop_admin_relations=args.valhalla)
         return
 
     if args.valhalla:
         patch(OSM_DIR / "ch_pfaedle.osm.pbf",
               OSM_DIR / "ch_pfaedle_walkable.osm.pbf", overlay,
-              underpass_elevation_fix=True)
+              underpass_elevation_fix=True,
+              drop_admin_relations=True)
     else:
         # MOTIS's own OSR graph is not a walking authority (Valhalla is),
         # so the overlay is deliberately not merged here.
